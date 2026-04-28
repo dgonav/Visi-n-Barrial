@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visión Barrial – Gestión de Incidencias</title>
+  <meta name="description"
+    content="Plataforma para reportar y hacer seguimiento de incidencias comunitarias. RF-002 / CAS002." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Session guard — must run before any render -->
+  <script>
+    (function () {
+      const raw = sessionStorage.getItem('vb_session');
+      if (!raw) { window.location.replace('index.html'); }
+    })();
+  </script>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════ NAV ═══════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-brand">
+      <span class="nav-icon">🏘️</span>
+      <span class="nav-title">Visión Barrial</span>
+    </div>
+    <div class="nav-links" id="navLinks">
+      <a href="#" class="nav-link active" data-view="dashboard" onclick="showView('dashboard');return false;">Inicio</a>
+      <a href="#" class="nav-link" data-view="reportar" onclick="showView('reportar');return false;">Reportar
+        Problema</a>
+      <a href="#" class="nav-link" data-view="mis-reportes" onclick="showView('mis-reportes');return false;">Mis
+        Reportes</a>
+    </div>
+    <div class="nav-user">
+      <div class="user-avatar" id="userAvatar">--</div>
+      <span class="user-name" id="userName">Cargando...</span>
+      <button class="btn-logout" id="btn-logout" onclick="logout()" title="Cerrar sesión">⎋ Salir</button>
+    </div>
+    <button class="hamburger" id="hamburger" onclick="toggleMenu()">☰</button>
+  </nav>
+
+  <!-- ═══════════════════════ VIEWS ═══════════════════════ -->
+  <main class="main-content">
+
+    <!-- ── DASHBOARD ── -->
+    <section id="view-dashboard" class="view active">
+      <div class="hero-section hero-centered">
+        <div class="hero-content">
+          <div class="hero-badge">Plataforma Ciudadana</div>
+          <h1 class="hero-title">Gestión de Incidencias<br /><span class="gradient-text">Comunitarias</span></h1>
+          <p class="hero-subtitle">Reporta problemas en tu barrio, haz seguimiento en tiempo real y contribuye a mejorar
+            tu comunidad desde cualquier lugar del mundo.</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary" onclick="showView('reportar')" id="btn-hero-reportar">
+              <span>📋</span> Reportar un Problema
+            </button>
+            <button class="btn btn-outline" onclick="showView('mis-reportes')" id="btn-hero-reportes">
+              <span>🔍</span> Ver Mis Reportes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">📊</div>
+          <div class="stat-body">
+            <div class="stat-number" id="count-total">0</div>
+            <div class="stat-label">Total Reportes</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏳</div>
+          <div class="stat-body">
+            <div class="stat-number" id="count-pendiente">0</div>
+            <div class="stat-label">Pendientes</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🔧</div>
+          <div class="stat-body">
+            <div class="stat-number" id="count-atencion">0</div>
+            <div class="stat-label">En Atención</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-body">
+            <div class="stat-number" id="count-resuelto">0</div>
+            <div class="stat-label">Resueltos</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h2 class="section-title">Reportes Recientes</h2>
+        <button class="btn btn-ghost" onclick="showView('mis-reportes')" id="btn-ver-todos">Ver todos →</button>
+      </div>
+      <div class="reports-list" id="recent-reports-list"></div>
+    </section>
+
+    <!-- ── REPORTAR PROBLEMA (CAS002) ── -->
+    <section id="view-reportar" class="view">
+      <div class="view-header">
+        <button class="btn-back" onclick="showView('dashboard')" id="btn-back-reportar">← Volver</button>
+        <div>
+          <h1 class="view-title">Reportar un Problema</h1>
+          <p class="view-subtitle">Documenta una incidencia en tu barrio</p>
+        </div>
+      </div>
+
+      <div class="form-container">
+        <form id="report-form" onsubmit="submitReport(event)" novalidate>
+
+          <div class="form-group">
+            <label class="form-label" for="tipo-problema">Tipo de Problema <span class="required">*</span></label>
+            <div class="select-wrapper">
+              <select id="tipo-problema" class="form-select" required>
+                <option value="">Selecciona una categoría</option>
+                <option value="infraestructura">🛣️ Infraestructura vial (baches, andenes)</option>
+                <option value="alumbrado">💡 Alumbrado público</option>
+                <option value="basuras">🗑️ Acumulación de basuras</option>
+                <option value="agua">💧 Problemas de agua / alcantarillado</option>
+                <option value="seguridad">🚨 Seguridad ciudadana</option>
+                <option value="espacio">🌳 Espacio público y parques</option>
+                <option value="ruido">🔊 Contaminación auditiva</option>
+                <option value="otro">📌 Otro</option>
+              </select>
+            </div>
+            <span class="form-error" id="error-tipo">Selecciona un tipo de problema válido.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="prioridad">Prioridad <span class="required">*</span></label>
+            <div class="select-wrapper">
+              <select id="prioridad" class="form-select" required>
+                <option value="">Selecciona la prioridad</option>
+                <option value="Alta">🔴 Alta — Riesgo inmediato para personas o infraestructura crítica</option>
+                <option value="Media">🟡 Media — Afecta la calidad de vida, requiere atención pronta</option>
+                <option value="Baja">🟢 Baja — Molestia menor, sin urgencia inmediata</option>
+              </select>
+            </div>
+            <span class="form-error" id="error-prioridad">Selecciona la prioridad del problema.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="descripcion">Descripción del Problema <span class="required">*</span></label>
+            <textarea id="descripcion" class="form-textarea"
+              placeholder="Describe detalladamente el problema (mínimo 20 caracteres, máximo 1000)..." minlength="20"
+              maxlength="1000" required rows="5"></textarea>
+            <div class="char-counter"><span id="char-count">0</span>/1000 caracteres</div>
+            <span class="form-error" id="error-descripcion">La descripción debe tener entre 20 y 1000 caracteres.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ubicacion">Ubicación <span class="required">*</span></label>
+            <div class="location-input-group">
+              <input type="text" id="ubicacion" class="form-input" placeholder="Ej: Calle 72 #45-10, Barrio El Prado"
+                required />
+              <button type="button" class="btn-location" id="btn-ubicacion-actual" onclick="getLocation()">📍 Ubicación
+                actual</button>
+            </div>
+            <span class="form-error" id="error-ubicacion">Ingresa la ubicación del problema.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fecha-ocurrencia">Fecha de Ocurrencia <span class="required">*</span></label>
+            <input type="date" id="fecha-ocurrencia" class="form-input" required />
+            <span class="form-error" id="error-fecha">La fecha no puede ser posterior a hoy.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="evidencia">Evidencia Fotográfica / Documental <span
+                class="optional">(Opcional – JPG, PNG, PDF · Máx. 5 MB)</span></label>
+            <div class="file-upload-area" id="file-upload-area" onclick="document.getElementById('evidencia').click()">
+              <input type="file" id="evidencia" accept=".jpg,.jpeg,.png,.pdf" style="display:none"
+                onchange="handleFile(event)" />
+              <div class="file-upload-icon">📎</div>
+              <div class="file-upload-text">Arrastra tu archivo aquí o <span class="file-link">haz clic para
+                  seleccionar</span></div>
+              <div class="file-upload-hint">JPG, PNG o PDF — máximo 5 MB</div>
+            </div>
+            <div class="file-preview" id="file-preview" style="display:none"></div>
+            <span class="form-error" id="error-archivo">Formato o tamaño no permitido (máx. 5 MB, solo
+              JPG/PNG/PDF).</span>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" onclick="resetForm()" id="btn-limpiar">Limpiar
+              formulario</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit-report">
+              <span class="btn-icon">📤</span>
+              <span class="btn-text">Enviar Reporte</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-overlay" id="success-modal" style="display:none">
+        <div class="modal-card">
+          <div class="modal-icon">🎉</div>
+          <h2 class="modal-title">¡Reporte Enviado!</h2>
+          <p class="modal-subtitle">Tu reporte ha sido registrado exitosamente.</p>
+          <div class="modal-code">
+            <span>Número de reporte:</span>
+            <strong id="modal-report-id">#VB-0001</strong>
+          </div>
+          <p class="modal-info">Puedes hacer seguimiento en la sección <strong>Mis Reportes</strong>.</p>
+          <div class="modal-actions">
+            <button class="btn btn-primary" onclick="closeModal()" id="btn-modal-reportes">Ver Mis Reportes</button>
+            <button class="btn btn-outline" onclick="closeModalStay()" id="btn-modal-nuevo">Nuevo Reporte</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── MIS REPORTES (CAS003 / CAS005) ── -->
+    <section id="view-mis-reportes" class="view">
+      <div class="view-header">
+        <button class="btn-back" onclick="showView('dashboard')" id="btn-back-reportes">← Volver</button>
+        <div>
+          <h1 class="view-title">Mis Reportes</h1>
+          <p class="view-subtitle">Seguimiento y trazabilidad</p>
+        </div>
+      </div>
+
+      <div class="summary-bar">
+        <div class="summary-item"><span class="summary-dot dot-green"></span><span>Atendidos: <strong
+              id="sum-atendidos">0</strong></span></div>
+        <div class="summary-item"><span class="summary-dot dot-orange"></span><span>Pendientes: <strong
+              id="sum-pendientes">0</strong></span></div>
+        <div class="summary-item"><span class="summary-dot dot-blue"></span><span>En Atención: <strong
+              id="sum-atencion">0</strong></span></div>
+      </div>
+
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label class="filter-label" for="filtro-tipo">Categoría</label>
+          <select id="filtro-tipo" class="form-select filter-select" onchange="applyFilters()">
+            <option value="">Todas</option>
+            <option value="infraestructura">🛣️ Infraestructura</option>
+            <option value="alumbrado">💡 Alumbrado</option>
+            <option value="basuras">🗑️ Basuras</option>
+            <option value="agua">💧 Agua</option>
+            <option value="seguridad">🚨 Seguridad</option>
+            <option value="espacio">🌳 Espacio público</option>
+            <option value="ruido">🔊 Ruido</option>
+            <option value="otro">📌 Otro</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filtro-estado">Estado</label>
+          <select id="filtro-estado" class="form-select filter-select" onchange="applyFilters()">
+            <option value="">Todos</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="En revisión">En revisión</option>
+            <option value="En atención">En atención</option>
+            <option value="Resuelto">Resuelto</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filtro-fecha-ini">Desde</label>
+          <input type="date" id="filtro-fecha-ini" class="form-input filter-input" onchange="applyFilters()" />
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filtro-fecha-fin">Hasta</label>
+          <input type="date" id="filtro-fecha-fin" class="form-input filter-input" onchange="applyFilters()" />
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filtro-busqueda">N° Reporte</label>
+          <input type="text" id="filtro-busqueda" class="form-input filter-input" placeholder="Buscar..."
+            oninput="applyFilters()" />
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="clearFilters()" id="btn-limpiar-filtros">Limpiar filtros</button>
+      </div>
+
+      <div class="reports-list" id="my-reports-list"></div>
+      <div id="empty-state" class="empty-state" style="display:none">
+        <div class="empty-icon">📭</div>
+        <h3>No se encontraron reportes</h3>
+        <p>No hay reportes con los filtros seleccionados.</p>
+        <button class="btn btn-outline" onclick="clearFilters()" id="btn-ampliar-busqueda">Ampliar búsqueda</button>
+      </div>
+      <div id="no-reports-state" class="empty-state" style="display:none">
+        <div class="empty-icon">📋</div>
+        <h3>Aún no tienes reportes</h3>
+        <p>¡Comienza reportando un problema en tu barrio!</p>
+        <button class="btn btn-primary" onclick="showView('reportar')" id="btn-primer-reporte">Hacer mi primer
+          reporte</button>
+      </div>
+    </section>
+
+    <!-- ── DETALLE (CAS003) ── -->
+    <section id="view-detalle" class="view">
+      <div class="view-header">
+        <button class="btn-back" onclick="showView('mis-reportes')" id="btn-back-detalle">← Volver</button>
+        <div>
+          <h1 class="view-title" id="detalle-titulo">Detalle del Reporte</h1>
+          <p class="view-subtitle">Historial y trazabilidad completa</p>
+        </div>
+      </div>
+      <div class="detalle-container" id="detalle-container"></div>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

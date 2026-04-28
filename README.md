@@ -2,8 +2,6 @@
 
 **Visión Barrial** es una aplicación web diseñada para empoderar a las comunidades, permitiendo a los ciudadanos reportar, hacer seguimiento y colaborar en la resolución de problemas en sus barrios de manera eficiente y transparente.
 
-![Visión Barrial Dashboard](https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1200&h=400)
-
 ## 📋 Descripción
 
 Esta plataforma facilita la comunicación entre los vecinos y las entidades responsables, centralizando el reporte de incidentes comunes como baches en la vía, fallas en el alumbrado público, problemas de recolección de basura y más. El sistema permite una trazabilidad completa desde que se crea el reporte hasta su resolución final.

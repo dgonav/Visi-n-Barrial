@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visión Barrial – Acceso al Sistema</title>
+  <meta name="description" content="Inicia sesión o regístrate en Visión Barrial para reportar y hacer seguimiento de incidencias comunitarias." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body>
+<div class="auth-wrapper">
+
+  <!-- ── LEFT: Branding ── -->
+  <aside class="auth-left">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <div class="brand-logo">🏘️</div>
+    <h1 class="brand-name">
+      Visión<br /><span class="brand-gradient">Barrial</span>
+    </h1>
+    <p class="brand-tagline">
+      La plataforma comunitaria para reportar, hacer seguimiento y resolver los problemas de tu barrio.
+    </p>
+
+    <div class="brand-features">
+      <div class="brand-feature">
+        <div class="feature-icon">📋</div>
+        <span>Reporta incidencias en segundos</span>
+      </div>
+      <div class="brand-feature">
+        <div class="feature-icon">🔍</div>
+        <span>Sigue el estado de cada caso en tiempo real</span>
+      </div>
+      <div class="brand-feature">
+        <div class="feature-icon">📊</div>
+        <span>Estadísticas y métricas de tu comunidad</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── RIGHT: Forms ── -->
+  <main class="auth-right">
+
+    <!-- Tabs -->
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" data-tab="login"    onclick="showTab('login')"    id="tab-login"    role="tab" aria-selected="true">Iniciar sesión</button>
+      <button class="auth-tab"        data-tab="register" onclick="showTab('register')" id="tab-register" role="tab" aria-selected="false">Registrarse</button>
+    </div>
+
+    <!-- ══ LOGIN FORM ══ -->
+    <form class="auth-form active" id="form-login" novalidate>
+      <div class="auth-header">
+        <h2 class="auth-title">Bienvenido de vuelta</h2>
+        <p class="auth-subtitle">Ingresa tus credenciales para continuar</p>
+      </div>
+
+      <!-- Alerts -->
+      <div class="sys-alert sys-alert-error"   id="alert-login-error"><span class="alert-icon">❌</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-warning" id="alert-login-warning"><span class="alert-icon">⚠️</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-success" id="alert-login-success"><span class="alert-icon">✅</span><span class="alert-msg"></span></div>
+      <!-- Lockout -->
+      <div class="lockout-badge" id="lockout-badge-login">
+        🔒 Cuenta bloqueada — tiempo restante: <span class="lockout-time" id="lockout-time">15:00</span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="log-email">Correo electrónico <span class="required">*</span></label>
+        <input type="email" id="log-email" class="field-input" placeholder="tucorreo@ejemplo.com" autocomplete="email" required />
+        <span class="field-error" id="err-log-email"></span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="log-password">Contraseña <span class="required">*</span></label>
+        <div class="pass-wrapper">
+          <input type="password" id="log-password" class="field-input" placeholder="Tu contraseña" autocomplete="current-password" required />
+          <button type="button" class="pass-toggle" onclick="togglePass('log-password', this)" aria-label="Mostrar contraseña"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <span class="field-error" id="err-log-pass"></span>
+      </div>
+
+      <div style="text-align:right; margin-bottom:.5rem;">
+        <button type="button" class="btn-link" onclick="showTab('recover')" id="btn-forgot">¿Olvidaste tu contraseña?</button>
+      </div>
+
+      <button type="submit" class="btn-auth" id="btn-login">
+        <div class="spinner" style="display:none"></div>
+        <span class="btn-text">Iniciar sesión</span>
+      </button>
+
+      <div class="auth-footer">
+        ¿No tienes cuenta?
+        <button type="button" class="btn-link" onclick="showTab('register')" id="btn-go-register">Regístrate aquí</button>
+      </div>
+    </form>
+
+    <!-- ══ REGISTER FORM ══ -->
+    <form class="auth-form" id="form-register" novalidate>
+      <div class="auth-header">
+        <h2 class="auth-title">Crea tu cuenta</h2>
+        <p class="auth-subtitle">Únete a la comunidad de Visión Barrial</p>
+      </div>
+
+      <div class="sys-alert sys-alert-error"   id="alert-register-error"><span class="alert-icon">❌</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-success" id="alert-register-success"><span class="alert-icon">✅</span><span class="alert-msg"></span></div>
+
+      <div class="field-group">
+        <label class="field-label" for="reg-name">Nombres y apellidos <span class="required">*</span></label>
+        <input type="text" id="reg-name" class="field-input" placeholder="Ej: Jorge Burgos Ortega" minlength="2" maxlength="100" autocomplete="name" required />
+        <span class="field-error" id="err-reg-name"></span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="reg-email">Correo electrónico <span class="required">*</span></label>
+        <input type="email" id="reg-email" class="field-input" placeholder="tucorreo@ejemplo.com" autocomplete="email" required />
+        <span class="field-error" id="err-reg-email"></span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="reg-password">Contraseña <span class="required">*</span></label>
+        <div class="pass-wrapper">
+          <input type="password" id="reg-password" class="field-input" placeholder="Mínimo 8 caracteres" autocomplete="new-password" required />
+          <button type="button" class="pass-toggle" onclick="togglePass('reg-password', this)" aria-label="Mostrar contraseña"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="pass-strength">
+          <div class="strength-bar"><div class="strength-fill" id="strength-fill" style="width:0%"></div></div>
+          <span class="strength-label" id="strength-label"></span>
+        </div>
+        <span class="field-hint">Mínimo 8 caracteres, 1 mayúscula y 1 número</span>
+        <span class="field-error" id="err-reg-pass"></span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="reg-confirm">Confirmar contraseña <span class="required">*</span></label>
+        <div class="pass-wrapper">
+          <input type="password" id="reg-confirm" class="field-input" placeholder="Repite tu contraseña" autocomplete="new-password" required />
+          <button type="button" class="pass-toggle" onclick="togglePass('reg-confirm', this)" aria-label="Mostrar contraseña"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <span class="field-error" id="err-reg-confirm"></span>
+      </div>
+
+      <button type="submit" class="btn-auth" id="btn-register">
+        <div class="spinner" style="display:none"></div>
+        <span class="btn-text">Crear cuenta</span>
+      </button>
+
+      <div class="auth-footer">
+        ¿Ya tienes cuenta?
+        <button type="button" class="btn-link" onclick="showTab('login')" id="btn-go-login">Inicia sesión</button>
+      </div>
+    </form>
+
+    <!-- ══ RESET PASSWORD FORM ══ -->
+    <form class="auth-form" id="form-reset" novalidate>
+      <div class="auth-header">
+        <h2 class="auth-title">Nueva contraseña</h2>
+        <p class="auth-subtitle">Crea una contraseña segura para tu cuenta</p>
+      </div>
+
+      <div class="sys-alert sys-alert-info"    id="alert-reset-info"><span class="alert-icon">ℹ️</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-error"   id="alert-reset-error"><span class="alert-icon">❌</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-success" id="alert-reset-success"><span class="alert-icon">✅</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-warning" id="alert-reset-expired"><span class="alert-icon">⚠️</span><span class="alert-msg"></span></div>
+
+      <div class="field-group">
+        <label class="field-label" for="reset-password">Nueva contraseña <span class="required">*</span></label>
+        <div class="pass-wrapper">
+          <input type="password" id="reset-password" class="field-input" placeholder="Mínimo 8 caracteres" autocomplete="new-password" required />
+          <button type="button" class="pass-toggle" onclick="togglePass('reset-password', this)" aria-label="Mostrar contraseña"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="pass-strength">
+          <div class="strength-bar"><div class="strength-fill" id="reset-strength-fill" style="width:0%"></div></div>
+          <span class="strength-label" id="reset-strength-label"></span>
+        </div>
+        <span class="field-hint">Mínimo 8 caracteres, 1 mayúscula y 1 número</span>
+        <span class="field-error" id="err-reset-pass"></span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="reset-confirm">Confirmar contraseña <span class="required">*</span></label>
+        <div class="pass-wrapper">
+          <input type="password" id="reset-confirm" class="field-input" placeholder="Repite tu nueva contraseña" autocomplete="new-password" required />
+          <button type="button" class="pass-toggle" onclick="togglePass('reset-confirm', this)" aria-label="Mostrar contraseña"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <span class="field-error" id="err-reset-confirm"></span>
+      </div>
+
+      <button type="submit" class="btn-auth" id="btn-reset">
+        <div class="spinner" style="display:none"></div>
+        <span class="btn-text">Cambiar contraseña</span>
+      </button>
+
+      <div class="auth-footer">
+        <button type="button" class="btn-link" onclick="showTab('login')">← Volver al inicio de sesión</button>
+      </div>
+    </form>
+
+    <!-- ══ RECOVER FORM ══ -->
+    <form class="auth-form" id="form-recover" novalidate>
+      <div class="auth-header">
+        <h2 class="auth-title">Recuperar contraseña</h2>
+        <p class="auth-subtitle">Ingresa tu correo y te enviaremos un enlace de recuperación</p>
+      </div>
+
+      <div class="sys-alert sys-alert-info" id="alert-recover-info"><span class="alert-icon">ℹ️</span><span class="alert-msg"></span></div>
+      <div class="sys-alert sys-alert-error" id="alert-recover-error"><span class="alert-icon">❌</span><span class="alert-msg"></span></div>
+
+      <div class="field-group">
+        <label class="field-label" for="rec-email">Correo electrónico registrado <span class="required">*</span></label>
+        <input type="email" id="rec-email" class="field-input" placeholder="tucorreo@ejemplo.com" required />
+        <span class="field-error" id="err-rec-email"></span>
+      </div>
+
+      <!-- Simulated recovery link box -->
+      <div class="recovery-box" id="recovery-box">
+        <div style="font-size:.85rem; color:var(--text-secondary); margin-bottom:.5rem;">🔗 Enlace de recuperación generado (válido 30 min):</div>
+        <span class="recovery-link" id="recovery-link"></span>
+        <div style="font-size:.75rem; color:var(--text-muted); margin-top:.5rem;">(Simulado — en producción se envía al correo)</div>
+      </div>
+
+      <button type="submit" class="btn-auth" id="btn-recover">
+        <span class="btn-text">Enviar enlace de recuperación</span>
+      </button>
+
+      <div class="auth-footer">
+        <button type="button" class="btn-link" onclick="showTab('login')" id="btn-back-login">← Volver al inicio de sesión</button>
+      </div>
+    </form>
+
+  </main>
+</div>
+
+<script src="auth.js"></script>
+</body>
+</html>

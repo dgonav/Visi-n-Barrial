@@ -184,7 +184,9 @@ function animateCounter(id, target) {
 
 // ─────────────── REPORT CARD HTML ───────────────
 function reportCardHTML(r) {
-  const cat  = CATEGORY_MAP[r.tipo] || { label: r.tipo, icon: '📌' };
+  const cat  = r.tipo === 'otro' && r.tipoPersonalizado
+    ? { label: r.tipoPersonalizado, icon: '📌' }
+    : (CATEGORY_MAP[r.tipo] || { label: r.tipo, icon: '📌' });
   const meta = STATUS_META[r.estado] || STATUS_META['Pendiente'];
   const pri  = r.prioridad ? PRIORITY_META[r.prioridad] : null;
   const fecha = formatDate(r.fechaCreacion);
@@ -282,7 +284,9 @@ function showDetail(id) {
   document.getElementById('view-detalle').classList.add('active');
   document.getElementById('detalle-titulo').textContent = `Reporte ${report.id}`;
 
-  const cat  = CATEGORY_MAP[report.tipo] || { label: report.tipo, icon: '📌' };
+  const cat  = report.tipo === 'otro' && report.tipoPersonalizado
+    ? { label: report.tipoPersonalizado, icon: '📌' }
+    : (CATEGORY_MAP[report.tipo] || { label: report.tipo, icon: '📌' });
   const meta = STATUS_META[report.estado] || STATUS_META['Pendiente'];
 
   const timelineHTML = report.historial.map(h => {
@@ -382,13 +386,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Validación inline al salir de cada campo (blur) — CAS002
   document.getElementById('tipo-problema')?.addEventListener('change', () => {
     const el = document.getElementById('tipo-problema');
+    const grupoOtro = document.getElementById('grupo-otro');
     if (!el.value) showFieldError('tipo-problema', 'error-tipo');
     else clearFieldError('tipo-problema');
-  });
-  document.getElementById('prioridad')?.addEventListener('change', () => {
-    const el = document.getElementById('prioridad');
-    if (!el.value) showFieldError('prioridad', 'error-prioridad');
-    else clearFieldError('prioridad');
+    grupoOtro.style.display = el.value === 'otro' ? 'block' : 'none';
+    if (el.value !== 'otro') document.getElementById('tipo-otro').value = '';
   });
   document.getElementById('descripcion')?.addEventListener('blur', () => {
     const el = document.getElementById('descripcion');
@@ -475,10 +477,12 @@ function validateForm() {
   const tipo = document.getElementById('tipo-problema');
   if (!tipo.value) { showFieldError('tipo-problema', 'error-tipo'); valid = false; }
   else clearFieldError('tipo-problema');
-  // Prioridad
-  const pri = document.getElementById('prioridad');
-  if (!pri.value) { showFieldError('prioridad', 'error-prioridad'); valid = false; }
-  else clearFieldError('prioridad');
+  // Tipo personalizado (Otro)
+  if (tipo.value === 'otro') {
+    const tipoOtro = document.getElementById('tipo-otro');
+    if (!tipoOtro.value.trim()) { showFieldError('tipo-otro', 'error-tipo-otro'); valid = false; }
+    else clearFieldError('tipo-otro');
+  }
   // Descripción
   const desc = document.getElementById('descripcion');
   if (desc.value.trim().length < 20) { showFieldError('descripcion', 'error-descripcion'); valid = false; }
@@ -525,7 +529,10 @@ function submitReport(event) {
   const newReport = {
     id: newId,
     tipo: document.getElementById('tipo-problema').value,
-    prioridad: document.getElementById('prioridad').value,
+    tipoPersonalizado: document.getElementById('tipo-problema').value === 'otro'
+      ? document.getElementById('tipo-otro').value.trim()
+      : null,
+    prioridad: null,
     descripcion: document.getElementById('descripcion').value.trim(),
     ubicacion: document.getElementById('ubicacion').value.trim(),
     fechaOcurrencia: document.getElementById('fecha-ocurrencia').value,
@@ -565,6 +572,7 @@ function resetForm() {
   document.querySelectorAll('.invalid').forEach(e => e.classList.remove('invalid'));
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('fecha-ocurrencia').value = today;
+  document.getElementById('grupo-otro').style.display = 'none';
   const gpsBtn = document.getElementById('btn-ubicacion-actual');
   if (gpsBtn) { gpsBtn.textContent = '📍 Ubicación actual'; gpsBtn.disabled = false; }
 }

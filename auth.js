@@ -150,16 +150,36 @@ async function loginUser({ email, password }) {
 // ─── Password Recovery (CAS001) ──────────────────────────────────────────────
 function recoverPassword(email) {
   const user = findUserByEmail(email);
-  // No revelar si el email existe (seguridad anti-enumeración)
-  if (!user) {
-    return { ok: true, simulated: true }; // same response either way
-  }
+  if (!user) return { ok: true, simulated: true };
   const token = generateToken(20);
   const tokens = JSON.parse(localStorage.getItem(RECOVER_KEY) || '{}');
   tokens[token] = { email: user.email, expiresAt: Date.now() + 30 * 60 * 1000 };
   localStorage.setItem(RECOVER_KEY, JSON.stringify(tokens));
-  // In a real app this would be sent by email
   return { ok: true, token, email: user.email };
+}
+
+function getRecoveryToken(token) {
+  const tokens = JSON.parse(localStorage.getItem(RECOVER_KEY) || '{}');
+  const rec = tokens[token];
+  if (!rec) return null;
+  if (rec.expiresAt < Date.now()) return null; // expirado
+  return rec;
+}
+
+async function resetPassword(token, newPassword) {
+  const tokens = JSON.parse(localStorage.getItem(RECOVER_KEY) || '{}');
+  const rec = tokens[token];
+  if (!rec || rec.expiresAt < Date.now()) {
+    return { ok: false, msg: 'El enlace expiró o no es válido. Solicita uno nuevo.' };
+  }
+  const users = getUsers();
+  const idx = users.findIndex(u => u.email === rec.email);
+  if (idx === -1) return { ok: false, msg: 'Usuario no encontrado.' };
+  users[idx].passwordHash = await hashPassword(newPassword);
+  saveUsers(users);
+  delete tokens[token];
+  localStorage.setItem(RECOVER_KEY, JSON.stringify(tokens));
+  return { ok: true };
 }
 
 // ─── Password strength ───────────────────────────────────────────────────────
@@ -282,8 +302,65 @@ function setLoading(btnId, loading) {
 
 // ─── REGISTER handler ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Check if already logged in
   if (getSession()) { window.location.href = 'app.html'; return; }
+
+  // ── Detectar token de recuperación en la URL ──────────────────────────────
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) {
+    const rec = getRecoveryToken(urlToken);
+    showTab('reset');
+    if (!rec) {
+      showAlert('reset', 'expired', 'Este enlace ha expirado o ya fue usado. Solicita uno nuevo.');
+      document.getElementById('btn-reset').disabled = true;
+    } else {
+      showAlert('reset', 'info', `Cambia la contraseña de la cuenta: ${rec.email}`);
+    }
+  }
+
+  // ── Medidor de fortaleza del reset ───────────────────────────────────────
+  document.getElementById('reset-password')?.addEventListener('input', function () {
+    const s = checkStrength(this.value);
+    const fill = document.getElementById('reset-strength-fill');
+    const lbl  = document.getElementById('reset-strength-label');
+    if (fill) { fill.style.width = s.pct + '%'; fill.style.background = s.color; }
+    if (lbl)  lbl.textContent = s.label;
+  });
+
+  // ── Reset password form ──────────────────────────────────────────────────
+  document.getElementById('form-reset')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    clearAlerts();
+    const pass    = document.getElementById('reset-password').value;
+    const confirm = document.getElementById('reset-confirm').value;
+    let ok = true;
+
+    if (pass.length < 8 || !/[A-Z]/.test(pass) || !/[0-9]/.test(pass)) {
+      markInvalid('reset-password', 'err-reset-pass', 'Mínimo 8 caracteres, 1 mayúscula y 1 número.');
+      ok = false;
+    } else markValid('reset-password', 'err-reset-pass');
+
+    if (pass !== confirm) {
+      markInvalid('reset-confirm', 'err-reset-confirm', 'Las contraseñas no coinciden.');
+      ok = false;
+    } else if (confirm) markValid('reset-confirm', 'err-reset-confirm');
+
+    if (!ok) return;
+
+    setLoading('btn-reset', true);
+    const result = await resetPassword(urlToken, pass);
+    setLoading('btn-reset', false);
+
+    if (!result.ok) {
+      showAlert('reset', 'error', result.msg);
+    } else {
+      showAlert('reset', 'success', '¡Contraseña actualizada! Redirigiendo al inicio de sesión...');
+      document.getElementById('btn-reset').disabled = true;
+      setTimeout(() => {
+        history.replaceState(null, '', location.pathname);
+        showTab('login');
+      }, 2000);
+    }
+  });
 
   // Password strength meter
   const regPass = document.getElementById('reg-password');
@@ -377,15 +454,17 @@ document.addEventListener('DOMContentLoaded', () => {
     markValid('rec-email','err-rec-email');
 
     const result = recoverPassword(email);
-    // Always show success (anti-enumeration)
     const box  = document.getElementById('recovery-box');
     const link = document.getElementById('recovery-link');
     if (box) box.classList.add('show');
     if (link && result.token) {
-      link.textContent = `https://visionbarrial.co/reset?token=${result.token.slice(0,16)}...`;
+      const url = `${location.origin}${location.pathname}?token=${result.token}`;
+      link.textContent = url;
+      link.style.cursor = 'pointer';
+      link.onclick = () => window.location.href = url;
     } else if (link) {
       link.textContent = 'Si el correo existe, recibirás el enlace en tu bandeja de entrada.';
     }
-    showAlert('recover', 'info', 'Si el correo está registrado, recibirás un enlace de recuperación válido por 30 minutos (MS006).');
+    showAlert('recover', 'info', 'Si el correo está registrado, recibirás un enlace válido por 30 minutos.');
   });
 });

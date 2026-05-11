@@ -1,600 +1,753 @@
 /* ══════════════════════════════════════
-   VISIÓN BARRIAL — App Logic
-   RF-002 / CAS002 | CAS003 | CAS005
+   VISIÓN BARRIAL — App Logic (Supabase)
 ══════════════════════════════════════ */
 
 'use strict';
 
-// ─── Session guard & user bootstrap ─────────────────────────────────────────
-const SESSION_KEY = 'vb_session';
+// ─── Global State ─────────────────────────────────────────
+let isAdmin = false;
+let currentUserId = null;
 
-function getSession() {
-  const raw = sessionStorage.getItem(SESSION_KEY);
-  return raw ? JSON.parse(raw) : null;
+// ─── Mapa de reporte ──────────────────────────────────────
+let reportMap    = null;
+let reportMarker = null;
+let reportLat    = null;
+let reportLng    = null;
+
+// ─── Session & Auth ─────────────────────────────────────────
+async function checkSession() {
+  const { data } = await window.supabase.auth.getSession();
+  if (!data.session) {
+    window.location.replace('index.html');
+    return null;
+  }
+  return data.session;
 }
 
-function logout() {
-  sessionStorage.removeItem(SESSION_KEY);
+async function logout() {
+  await window.supabase.auth.signOut();
   window.location.href = 'index.html';
 }
 
-function loadUserUI() {
-  const session = getSession();
-  if (!session) { window.location.replace('index.html'); return; }
-  const avatarEl = document.getElementById('userAvatar');
-  const nameEl   = document.getElementById('userName');
-  if (avatarEl) avatarEl.textContent = session.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  if (nameEl)   nameEl.textContent   = session.name;
+async function loadUserUI() {
+  const session = await checkSession();
+  if (!session) return;
+
+  currentUserId = session.user.id;
+  const userEmail = session.user.email;
+  const userName = session.user.user_metadata?.nombre_completo || userEmail;
+
+  const sidebarName = document.getElementById('sidebar-user-name');
+  const topbarName  = document.getElementById('topbar-user-name');
+  if (sidebarName) sidebarName.textContent = userName;
+  if (topbarName)  topbarName.textContent  = userName;
+
+  // CAS004: detectar rol admin en tabla perfiles
+  try {
+    const { data: perfil } = await window.supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', session.user.id)
+      .single();
+
+    if (perfil?.rol === 'administrador' || perfil?.rol === 'gestor') {
+      window.location.replace('admin.html');
+      return;
+    }
+  } catch (_) { /* sin perfil especial */ }
 }
 
-// ─────────────── DATA STORE ───────────────
-const STORAGE_KEY = 'vb_reports';
-
-const CATEGORY_MAP = {
-  infraestructura: { label: 'Infraestructura vial', icon: '🛣️' },
-  alumbrado:       { label: 'Alumbrado público',    icon: '💡' },
-  basuras:         { label: 'Acumulación de basuras', icon: '🗑️' },
-  agua:            { label: 'Agua / Alcantarillado', icon: '💧' },
-  seguridad:       { label: 'Seguridad ciudadana',   icon: '🚨' },
-  espacio:         { label: 'Espacio público',        icon: '🌳' },
-  ruido:           { label: 'Contaminación auditiva', icon: '🔊' },
-  otro:            { label: 'Otro',                   icon: '📌' },
-};
-
-const STATUS_META = {
-  'Pendiente':   { badge: 'badge-pendiente', dot: '#EF4444', timelineColor: '#EF4444' },
-  'En revisión': { badge: 'badge-revision',  dot: '#F59E0B', timelineColor: '#F59E0B' },
-  'En atención': { badge: 'badge-atencion',  dot: '#3B82F6', timelineColor: '#3B82F6' },
-  'Resuelto':    { badge: 'badge-resuelto',  dot: '#22C55E', timelineColor: '#22C55E' },
-  'Cancelado':   { badge: 'badge-cancelado', dot: '#6B7280', timelineColor: '#6B7280' },
-};
-
-const PRIORITY_META = {
-  'Alta':  { badge: 'badge-prioridad-alta' },
-  'Media': { badge: 'badge-prioridad-media' },
-  'Baja':  { badge: 'badge-prioridad-baja' },
-};
-
-// Demo seed data
-const SEED_REPORTS = [
-  {
-    id: 'VB-0001',
-    tipo: 'infraestructura',
-    prioridad: 'Alta',
-    descripcion: 'Existe un bache de grandes dimensiones en la Calle 72 con Carrera 43, el cual representa un peligro para vehículos y peatones. El problema lleva más de tres semanas sin atención.',
-    ubicacion: 'Calle 72 #43-12, Barrio El Prado, Barranquilla',
-    fechaOcurrencia: '2026-04-10',
-    fechaCreacion: '2026-04-10T09:15:00',
-    estado: 'En atención',
-    evidencia: null,
-    historial: [
-      { estado: 'Pendiente',   fecha: '2026-04-10T09:15:00', actor: 'Sistema',    obs: 'Reporte creado exitosamente.' },
-      { estado: 'En revisión', fecha: '2026-04-12T11:30:00', actor: 'Admin. Ana García', obs: 'Reporte validado. Se notifica al área de obras públicas.' },
-      { estado: 'En atención', fecha: '2026-04-16T08:00:00', actor: 'Admin. Ana García', obs: 'Cuadrilla asignada. Intervención programada para la próxima semana.' },
-    ]
-  },
-  {
-    id: 'VB-0002',
-    tipo: 'alumbrado',
-    prioridad: 'Media',
-    descripcion: 'Tres postes de alumbrado público en el Parque Olaya Herrera llevan apagados más de dos semanas, generando inseguridad en la zona en horas de la noche.',
-    ubicacion: 'Parque Olaya Herrera, Cra. 38, Barranquilla',
-    fechaOcurrencia: '2026-04-15',
-    fechaCreacion: '2026-04-15T19:40:00',
-    estado: 'Resuelto',
-    evidencia: null,
-    historial: [
-      { estado: 'Pendiente',   fecha: '2026-04-15T19:40:00', actor: 'Sistema',    obs: 'Reporte creado exitosamente.' },
-      { estado: 'En revisión', fecha: '2026-04-16T10:00:00', actor: 'Admin. Luis Morales', obs: 'Reporte verificado.' },
-      { estado: 'En atención', fecha: '2026-04-17T08:30:00', actor: 'Admin. Luis Morales', obs: 'Técnicos enviados al sitio.' },
-      { estado: 'Resuelto',    fecha: '2026-04-18T14:00:00', actor: 'Admin. Luis Morales', obs: 'Luminarias reemplazadas. Problema solucionado.' },
-    ]
-  },
-  {
-    id: 'VB-0003',
-    tipo: 'basuras',
-    prioridad: 'Baja',
-    descripcion: 'Acumulación excesiva de basura en el lote baldío de la Carrera 50. El olor y los roedores afectan a los vecinos del sector.',
-    ubicacion: 'Carrera 50 #68-20, Barrio Modelo, Barranquilla',
-    fechaOcurrencia: '2026-04-20',
-    fechaCreacion: '2026-04-20T08:00:00',
-    estado: 'Pendiente',
-    evidencia: null,
-    historial: [
-      { estado: 'Pendiente', fecha: '2026-04-20T08:00:00', actor: 'Sistema', obs: 'Reporte creado. En espera de revisión.' },
-    ]
-  },
-];
-
-function loadReports() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) return JSON.parse(stored);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_REPORTS));
-  return SEED_REPORTS;
-}
-
-function saveReports(reports) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
-}
-
-function getReports() { return loadReports(); }
-
-function generateId() {
-  const reports = getReports();
-  if (reports.length === 0) return 'VB-0001';
-  const max = reports.reduce((m, r) => {
-    const n = parseInt(r.id.replace('VB-', ''), 10) || 0;
-    return Math.max(m, n);
-  }, 0);
-  return 'VB-' + String(max + 1).padStart(4, '0');
-}
-
-// ─────────────── NAVIGATION ───────────────
+// ─── Navigation ─────────────────────────────────────────
 let currentView = 'dashboard';
 
-function showView(view) {
+function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-' + view).classList.add('active');
-  document.querySelectorAll('.nav-link').forEach(l => {
-    l.classList.toggle('active', l.dataset.view === view);
-  });
-  currentView = view;
-  // Close mobile menu
-  document.getElementById('navLinks').classList.remove('open');
-  // Re-render on switch
-  if (view === 'dashboard') renderDashboard();
-  if (view === 'mis-reportes') renderMyReports();
+  const view = document.getElementById('view-' + viewName);
+  if (view) view.classList.add('active');
+
+  document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.querySelector(`[data-view="${viewName}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  currentView = viewName;
+
+  const titles = {
+    dashboard:    'Panel Principal',
+    report:       'Reportar Problema',
+    'my-reports': 'Mis Reportes',
+    search:       'Buscar Reportes',
+    admin:        'Panel Administrativo'
+  };
+  const topbarTitle = document.getElementById('topbar-title');
+  if (topbarTitle) topbarTitle.textContent = titles[viewName] || 'Visión Barrial';
+
+  if (viewName === 'my-reports') loadMyReports();
+  else if (viewName === 'dashboard') loadDashboard();
+  else if (viewName === 'admin') loadAdminReports();
+  else if (viewName === 'report') initReportMap();
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── Dashboard ─────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const session = await checkSession();
+    if (!session) return;
+
+    const { data: reportes, error } = await window.supabase
+      .from('reportes')
+      .select('estado')
+      .eq('usuario_id', session.user.id);
+
+    if (error) throw error;
+
+    const pendientes  = reportes.filter(r => r.estado === 'Pendiente').length;
+    const enAtencion  = reportes.filter(r => r.estado === 'En atención' || r.estado === 'En revisión').length;
+    const resueltos   = reportes.filter(r => r.estado === 'Resuelto').length;
+
+    document.getElementById('stat-pending').textContent  = pendientes;
+    document.getElementById('stat-progress').textContent = enAtencion;
+    document.getElementById('stat-resolved').textContent = resueltos;
+    document.getElementById('stat-total').textContent    = reportes.length;
+
+    const { data: recientes, error: recError } = await window.supabase
+      .from('reportes')
+      .select('*, categorias (nombre)')
+      .eq('usuario_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (recError) throw recError;
+
+    const tbody = document.getElementById('recent-reports-tbody');
+    if (!recientes || recientes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay reportes recientes</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = recientes.map(r => `
+      <tr>
+        <td><strong>${r.numero_caso}</strong></td>
+        <td>${r.categorias?.nombre || 'N/A'}</td>
+        <td>${truncate(r.descripcion, 50)}</td>
+        <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
+        <td>${formatDate(r.created_at)}</td>
+        <td><button class="btn-secondary btn-sm" onclick="viewReportDetail('${r.id}')">Ver</button></td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('Error cargando dashboard:', error);
+  }
+}
+
+// ─── Mis Reportes (CAS005: filtro por estado) ──────────────────────
+async function loadMyReports(filterEstado = '') {
+  try {
+    const session = await checkSession();
+    if (!session) return;
+
+    let query = window.supabase
+      .from('reportes')
+      .select('*, categorias (nombre)')
+      .eq('usuario_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (filterEstado) query = query.eq('estado', filterEstado);
+
+    const { data: reportes, error } = await query;
+    if (error) throw error;
+
+    const tbody = document.getElementById('my-reports-tbody');
+    if (!reportes || reportes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No has creado reportes aún</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = reportes.map(r => `
+      <tr>
+        <td><strong>${r.numero_caso}</strong></td>
+        <td>${r.categorias?.nombre || 'N/A'}</td>
+        <td>${r.titulo}</td>
+        <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
+        <td>${r.prioridad}</td>
+        <td>${formatDate(r.created_at)}</td>
+        <td><button class="btn-secondary btn-sm" onclick="viewReportDetail('${r.id}')">Ver</button></td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('Error cargando reportes:', error);
+  }
+}
+
+// ─── Panel Administrativo (CAS004) ────────────────────────────────
+async function loadAdminReports() {
+  if (!isAdmin) return;
+
+  try {
+    const { data: reportes, error } = await window.supabase
+      .from('reportes')
+      .select('*, categorias (nombre), perfiles (nombre_completo, email)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const tbody = document.getElementById('admin-reports-tbody');
+    if (!reportes || reportes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No hay reportes en el sistema</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = reportes.map(r => `
+      <tr>
+        <td><strong>${r.numero_caso}</strong></td>
+        <td>${r.perfiles?.nombre_completo || r.perfiles?.email || 'N/A'}</td>
+        <td>${r.categorias?.nombre || 'N/A'}</td>
+        <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
+        <td>${r.prioridad}</td>
+        <td>${formatDate(r.created_at)}</td>
+        <td><button class="btn-secondary btn-sm" onclick="viewReportDetail('${r.id}')">Ver</button></td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('Error cargando panel admin:', error);
+  }
+}
+
+// ─── Detalle del reporte (CAS003 + CAS004) ────────────────────────
+async function viewReportDetail(reportId) {
+  try {
+    const [reportResult, historialResult] = await Promise.all([
+      window.supabase
+        .from('reportes')
+        .select('*, categorias (nombre)')
+        .eq('id', reportId)
+        .single(),
+      window.supabase
+        .from('historial_reportes')
+        .select('*')
+        .eq('reporte_id', reportId)
+        .order('created_at', { ascending: false })
+    ]);
+
+    if (reportResult.error) throw reportResult.error;
+
+    const reporte  = reportResult.data;
+    const historial = historialResult.data || [];
+
+    // CAS003: historial de estados
+    const historialHTML = historial.length > 0
+      ? `<div class="history-timeline">${historial.map(h => `
+          <div class="history-item">
+            <div class="history-date">${formatDateTime(h.created_at)}</div>
+            <div class="history-change">
+              <span class="badge badge-${stateBadge(h.estado_anterior || 'Pendiente')}">${h.estado_anterior || '—'}</span>
+              <span class="history-arrow">→</span>
+              <span class="badge badge-${stateBadge(h.estado_nuevo)}">${h.estado_nuevo}</span>
+            </div>
+            ${h.observacion ? `<div class="history-obs">${escapeHtml(h.observacion)}</div>` : ''}
+          </div>
+        `).join('')}</div>`
+      : '<p class="text-muted-sm">Sin cambios de estado registrados.</p>';
+
+    // CAS004: formulario de cambio de estado (solo admin)
+    const adminFormHTML = isAdmin ? `
+      <div class="admin-state-form">
+        <h4 class="admin-form-title">Cambiar Estado</h4>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label class="form-label" for="admin-new-state">Nuevo Estado</label>
+          <select id="admin-new-state" class="form-control">
+            ${['Pendiente','En revisión','En atención','Resuelto','Rechazado'].map(s =>
+              `<option value="${s}"${reporte.estado === s ? ' selected' : ''}>${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label class="form-label" for="admin-observation">Observación <span class="required">*</span></label>
+          <textarea id="admin-observation" class="form-control" rows="3" placeholder="Describe el motivo del cambio de estado..."></textarea>
+        </div>
+        <button class="btn-primary btn-sm" id="btn-save-state"
+          onclick="saveAdminStateChange('${reporte.id}','${escapeHtml(reporte.estado)}')">
+          Guardar Cambio
+        </button>
+        <div id="admin-form-msg" style="margin-top:0.75rem;font-size:0.85rem;"></div>
+      </div>
+    ` : '';
+
+    const modal     = document.getElementById('modal-detail');
+    const modalBody = document.getElementById('modal-detail-body');
+
+    modalBody.innerHTML = `
+      <div style="display:grid;gap:1.5rem;">
+        <div>
+          <div class="detail-label">Número de Caso</div>
+          <div style="font-size:1.1rem;font-weight:700;">${reporte.numero_caso}</div>
+        </div>
+        <div>
+          <div class="detail-label">Categoría</div>
+          <div>${reporte.categorias?.nombre || 'N/A'}</div>
+        </div>
+        <div>
+          <div class="detail-label">Título</div>
+          <div style="font-weight:600;">${escapeHtml(reporte.titulo)}</div>
+        </div>
+        <div>
+          <div class="detail-label">Descripción</div>
+          <div style="white-space:pre-wrap;">${escapeHtml(reporte.descripcion)}</div>
+        </div>
+        <div>
+          <div class="detail-label">Ubicación</div>
+          <div>📍 ${escapeHtml(reporte.ubicacion)}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div>
+            <div class="detail-label">Estado</div>
+            <span class="badge badge-${stateBadge(reporte.estado)}">${reporte.estado}</span>
+          </div>
+          <div>
+            <div class="detail-label">Prioridad</div>
+            <div>${reporte.prioridad}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div>
+            <div class="detail-label">Fecha Ocurrencia</div>
+            <div>${formatDate(reporte.fecha_ocurrencia)}</div>
+          </div>
+          <div>
+            <div class="detail-label">Fecha Creación</div>
+            <div>${formatDate(reporte.created_at)}</div>
+          </div>
+        </div>
+        ${reporte.evidencia_url ? `
+          <div>
+            <div class="detail-label">Evidencia</div>
+            <a href="${reporte.evidencia_url}" target="_blank" rel="noopener" class="btn-primary btn-sm">📎 Ver archivo adjunto</a>
+          </div>
+        ` : ''}
+        <div>
+          <div class="detail-label" style="margin-bottom:0.75rem;">Historial de Estados</div>
+          ${historialHTML}
+        </div>
+        ${adminFormHTML}
+      </div>
+    `;
+
+    modal.style.display = 'flex';
+
+  } catch (error) {
+    console.error('Error cargando detalle:', error);
+  }
+}
+
+// ─── Guardar cambio de estado (CAS004) ────────────────────────────
+async function saveAdminStateChange(reportId, estadoActual) {
+  const nuevoEstado  = document.getElementById('admin-new-state').value;
+  const observacion  = document.getElementById('admin-observation').value.trim();
+  const msgEl        = document.getElementById('admin-form-msg');
+  const btn          = document.getElementById('btn-save-state');
+
+  if (!observacion) {
+    msgEl.innerHTML = '<span style="color:var(--danger);">La observación es obligatoria.</span>';
+    return;
+  }
+
+  btn.disabled     = true;
+  btn.textContent  = 'Guardando...';
+  msgEl.innerHTML  = '';
+
+  try {
+    const { error: updateError } = await window.supabase
+      .from('reportes')
+      .update({
+        estado:         nuevoEstado,
+        observaciones:  observacion || null,
+        updated_at:     new Date().toISOString()
+      })
+      .eq('id', reportId);
+
+    if (updateError) throw updateError;
+    // El trigger de Supabase inserta el historial automáticamente
+
+    msgEl.innerHTML = '<span style="color:var(--success);">✅ Estado actualizado correctamente.</span>';
+    // Refresca el modal para mostrar el historial actualizado
+    setTimeout(() => viewReportDetail(reportId), 1400);
+
+  } catch (error) {
+    console.error('Error guardando cambio:', error);
+    btn.disabled    = false;
+    btn.textContent = 'Guardar Cambio';
+    msgEl.innerHTML = `<span style="color:var(--danger);">Error: ${escapeHtml(error.message)}</span>`;
+  }
+}
+
+// ─── Búsqueda funcional (CAS004 / vista search) ───────────────────
+async function searchReports() {
+  const numeroCaso = document.getElementById('search-number').value.trim();
+  const dateFrom   = document.getElementById('search-date-from').value;
+  const dateTo     = document.getElementById('search-date-to').value;
+  const tbody      = document.getElementById('search-results-tbody');
+
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Buscando...</td></tr>';
+
+  try {
+    const session = await checkSession();
+    if (!session) return;
+
+    let query = window.supabase
+      .from('reportes')
+      .select('*, categorias (nombre)')
+      .order('created_at', { ascending: false });
+
+    // ciudadanos solo ven sus propios reportes
+    if (!isAdmin) query = query.eq('usuario_id', session.user.id);
+    if (numeroCaso) query = query.ilike('numero_caso', `%${numeroCaso}%`);
+    if (dateFrom)   query = query.gte('created_at', dateFrom);
+    if (dateTo)     query = query.lte('created_at', dateTo + 'T23:59:59');
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No se encontraron resultados</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map(r => `
+      <tr>
+        <td><strong>${r.numero_caso}</strong></td>
+        <td>${r.categorias?.nombre || 'N/A'}</td>
+        <td>${truncate(r.descripcion, 50)}</td>
+        <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
+        <td>${formatDate(r.created_at)}</td>
+        <td><button class="btn-secondary btn-sm" onclick="viewReportDetail('${r.id}')">Ver</button></td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('Error buscando:', error);
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Error al realizar la búsqueda.</td></tr>';
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────
+function truncate(text, maxLength) {
+  if (!text) return '';
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleDateString('es-CO', {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+}
+
+function formatDateTime(dateString) {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleString('es-CO', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Genera la clase CSS del badge normalizando tildes y espacios
+function stateBadge(estado) {
+  const map = {
+    'Pendiente':   'pendiente',
+    'En revisión': 'en-revision',
+    'En atención': 'en-atencion',
+    'Resuelto':    'resuelto',
+    'Rechazado':   'rechazado'
+  };
+  return map[estado] || (estado || '').toLowerCase().replace(/\s+/g, '-');
+}
+
+// ─── Mapa interactivo (Leaflet + OpenStreetMap) ───────────
+function initReportMap() {
+  if (reportMap) {
+    // Ya inicializado: solo corregir tamaño por el contenedor oculto
+    setTimeout(() => reportMap.invalidateSize(), 150);
+    return;
+  }
+
+  reportMap = L.map('report-map').setView([10.9685, -74.7813], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }).addTo(reportMap);
+
+  reportMap.on('click', function (e) {
+    placeMarker(e.latlng.lat, e.latlng.lng);
+  });
+
+  setTimeout(() => reportMap.invalidateSize(), 150);
+}
+
+function placeMarker(lat, lng) {
+  if (reportMarker) {
+    reportMarker.setLatLng([lat, lng]);
+  } else {
+    reportMarker = L.marker([lat, lng], { draggable: true }).addTo(reportMap);
+    reportMarker.on('dragend', function () {
+      const pos = reportMarker.getLatLng();
+      updateLocationFromCoords(pos.lat, pos.lng);
+    });
+  }
+  updateLocationFromCoords(lat, lng);
+}
+
+async function updateLocationFromCoords(lat, lng) {
+  reportLat = lat;
+  reportLng = lng;
+
+  const input = document.getElementById('report-location');
+  if (input) input.placeholder = 'Obteniendo dirección...';
+
+  try {
+    const res  = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`
+    );
+    const data = await res.json();
+    if (input) input.value = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  } catch (_) {
+    if (input) input.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  }
 }
 
 function toggleMenu() {
-  document.getElementById('navLinks').classList.toggle('open');
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.toggle('open');
 }
 
-// ─────────────── DASHBOARD ───────────────
-function renderDashboard() {
-  const reports = getReports();
-  const total     = reports.length;
-  const pendiente = reports.filter(r => r.estado === 'Pendiente').length;
-  const atencion  = reports.filter(r => r.estado === 'En atención' || r.estado === 'En revisión').length;
-  const resuelto  = reports.filter(r => r.estado === 'Resuelto').length;
-
-  animateCounter('count-total',    total);
-  animateCounter('count-pendiente', pendiente);
-  animateCounter('count-atencion',  atencion);
-  animateCounter('count-resuelto',  resuelto);
-
-  const container = document.getElementById('recent-reports-list');
-  const recent = [...reports].sort((a, b) => new Date(b.fechaCreacion) - new Date(a.fechaCreacion)).slice(0, 4);
-  container.innerHTML = recent.length
-    ? recent.map(r => reportCardHTML(r)).join('')
-    : '<p style="color:var(--text-muted);text-align:center;padding:2rem">No hay reportes aún.</p>';
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.style.display = 'none';
 }
 
-function animateCounter(id, target) {
-  const el = document.getElementById(id);
-  let current = 0;
-  const step = Math.ceil(target / 20);
-  const timer = setInterval(() => {
-    current = Math.min(current + step, target);
-    el.textContent = current;
-    if (current >= target) clearInterval(timer);
-  }, 40);
-}
+// ─── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async function () {
+  await loadUserUI();
+  loadDashboard();
 
-// ─────────────── REPORT CARD HTML ───────────────
-function reportCardHTML(r) {
-  const cat  = r.tipo === 'otro' && r.tipoPersonalizado
-    ? { label: r.tipoPersonalizado, icon: '📌' }
-    : (CATEGORY_MAP[r.tipo] || { label: r.tipo, icon: '📌' });
-  const meta = STATUS_META[r.estado] || STATUS_META['Pendiente'];
-  const pri  = r.prioridad ? PRIORITY_META[r.prioridad] : null;
-  const fecha = formatDate(r.fechaCreacion);
-  const priBadge = pri
-    ? `<span class="badge ${pri.badge}" style="font-size:.65rem;padding:.15rem .5rem;">${r.prioridad}</span>`
-    : '';
-  return `
-    <div class="report-card" onclick="showDetail('${r.id}')" id="card-${r.id}">
-      <div class="report-category-icon">${cat.icon}</div>
-      <div class="report-info">
-        <div class="report-id" style="display:flex;align-items:center;gap:.4rem;">${r.id} ${priBadge}</div>
-        <div class="report-title">${cat.label}</div>
-        <div class="report-location">📍 ${r.ubicacion}</div>
-      </div>
-      <span class="badge ${meta.badge}">${r.estado}</span>
-      <div class="report-date">${fecha}</div>
-      <div class="report-arrow">›</div>
-    </div>`;
-}
+  // Logout
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) btnLogout.addEventListener('click', logout);
 
-// ─────────────── MY REPORTS (CAS003/CAS005) ───────────────
-function renderMyReports(filteredList) {
-  const reports = filteredList !== undefined ? filteredList : getReports();
-  const allReports = getReports();
+  // Mobile menu
+  const btnMenu = document.getElementById('btn-menu');
+  if (btnMenu) btnMenu.addEventListener('click', toggleMenu);
 
-  // Counters
-  document.getElementById('sum-atendidos').textContent  = allReports.filter(r => r.estado === 'Resuelto').length;
-  document.getElementById('sum-pendientes').textContent = allReports.filter(r => r.estado === 'Pendiente').length;
-  document.getElementById('sum-atencion').textContent   = allReports.filter(r => r.estado === 'En atención' || r.estado === 'En revisión').length;
+  // ── CAS006: contador y validación de descripción ──────────────
+  const descInput = document.getElementById('report-description');
+  const descCount = document.getElementById('desc-count');
+  const descError = document.getElementById('desc-error');
 
-  const container = document.getElementById('my-reports-list');
-  const emptyState = document.getElementById('empty-state');
-  const noReports  = document.getElementById('no-reports-state');
-
-  if (allReports.length === 0) {
-    container.innerHTML = '';
-    emptyState.style.display = 'none';
-    noReports.style.display  = 'block';
-    return;
-  }
-  noReports.style.display = 'none';
-
-  const sorted = [...reports].sort((a, b) => new Date(b.fechaCreacion) - new Date(a.fechaCreacion));
-  if (sorted.length === 0) {
-    container.innerHTML = '';
-    emptyState.style.display = 'block';
-  } else {
-    emptyState.style.display = 'none';
-    container.innerHTML = sorted.map(r => reportCardHTML(r)).join('');
-  }
-}
-
-function applyFilters() {
-  const tipo     = document.getElementById('filtro-tipo').value;
-  const estado   = document.getElementById('filtro-estado').value;
-  const fechaIni = document.getElementById('filtro-fecha-ini').value;
-  const fechaFin = document.getElementById('filtro-fecha-fin').value;
-  const busqueda = document.getElementById('filtro-busqueda').value.trim().toUpperCase();
-
-  let results = getReports();
-  if (tipo)     results = results.filter(r => r.tipo === tipo);
-  if (estado)   results = results.filter(r => r.estado === estado);
-  if (fechaIni) results = results.filter(r => r.fechaCreacion >= fechaIni);
-  if (fechaFin) results = results.filter(r => r.fechaCreacion <= fechaFin + 'T23:59:59');
-  if (busqueda) {
-    results = results.filter(r => {
-      const cat = CATEGORY_MAP[r.tipo] || { label: r.tipo };
-      return r.id.toUpperCase().includes(busqueda)
-          || r.ubicacion.toUpperCase().includes(busqueda)
-          || r.descripcion.toUpperCase().includes(busqueda)
-          || cat.label.toUpperCase().includes(busqueda);
+  if (descInput) {
+    descInput.addEventListener('input', function () {
+      const len = this.value.length;
+      if (descCount) {
+        descCount.textContent = len;
+        descCount.style.color = (len < 20 || len > 1000) ? 'var(--danger)' : '';
+      }
+      if (descError)
+        descError.style.display = (len > 0 && (len < 20 || len > 1000)) ? 'block' : 'none';
     });
   }
 
-  renderMyReports(results);
-}
+  // ── CAS006: fecha no futura ────────────────────────────────────
+  const dateInput = document.getElementById('report-date');
+  const dateError = document.getElementById('date-error');
 
-function clearFilters() {
-  document.getElementById('filtro-tipo').value      = '';
-  document.getElementById('filtro-estado').value    = '';
-  document.getElementById('filtro-fecha-ini').value = '';
-  document.getElementById('filtro-fecha-fin').value = '';
-  document.getElementById('filtro-busqueda').value  = '';
-  renderMyReports();
-}
+  if (dateInput) {
+    dateInput.addEventListener('change', function () {
+      const sel   = new Date(this.value + 'T00:00:00');
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (dateError) dateError.style.display = sel > today ? 'block' : 'none';
+    });
+  }
 
-// ─────────────── DETAIL VIEW (CAS003) ───────────────
-function showDetail(id) {
-  const reports = getReports();
-  const report  = reports.find(r => r.id === id);
-  if (!report) return;
+  // ── CAS006: archivo máximo 5 MB (sin alert) ───────────────────
+  const fileInput = document.getElementById('report-evidence');
+  const fileError = document.getElementById('file-error');
 
-  document.getElementById('view-detalle').classList.remove('active');
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-detalle').classList.add('active');
-  document.getElementById('detalle-titulo').textContent = `Reporte ${report.id}`;
+  if (fileInput) {
+    fileInput.addEventListener('change', function () {
+      const tooBig = this.files.length > 0 && this.files[0].size > 5 * 1024 * 1024;
+      if (fileError) fileError.style.display = tooBig ? 'block' : 'none';
+      if (tooBig) this.value = '';
+    });
+  }
 
-  const cat  = report.tipo === 'otro' && report.tipoPersonalizado
-    ? { label: report.tipoPersonalizado, icon: '📌' }
-    : (CATEGORY_MAP[report.tipo] || { label: report.tipo, icon: '📌' });
-  const meta = STATUS_META[report.estado] || STATUS_META['Pendiente'];
+  // ── CAS005: filtro de estado en "Mis Reportes" ────────────────
+  const filterStatus = document.getElementById('filter-status');
+  if (filterStatus) {
+    filterStatus.addEventListener('change', function () {
+      loadMyReports(this.value);
+    });
+  }
 
-  const timelineHTML = report.historial.map(h => {
-    const m = STATUS_META[h.estado] || STATUS_META['Pendiente'];
-    return `
-      <div class="timeline-item">
-        <div class="timeline-dot" style="background:${m.timelineColor}"></div>
-        <div class="timeline-date">${formatDateTime(h.fecha)}</div>
-        <div class="timeline-state"><span class="badge ${m.badge}">${h.estado}</span></div>
-        ${h.obs ? `<div class="timeline-obs">"${h.obs}"</div>` : ''}
-        <div class="timeline-actor">Por: ${h.actor}</div>
-      </div>`;
-  }).reverse().join('');
+  // ── Búsqueda ──────────────────────────────────────────────────
+  const btnSearch = document.getElementById('btn-search');
+  if (btnSearch) btnSearch.addEventListener('click', searchReports);
 
-  const pri = report.prioridad ? PRIORITY_META[report.prioridad] : null;
-  const cancelBtn = report.estado === 'Pendiente'
-    ? `<div class="detalle-actions">
-         <button class="btn btn-outline btn-danger" onclick="cancelReport('${report.id}')">
-           🚫 Cancelar Reporte
-         </button>
-       </div>`
-    : '';
+  // ── Formulario de reporte ─────────────────────────────────────
+  const formReport = document.getElementById('form-report');
+  if (formReport) {
+    formReport.addEventListener('submit', async function (e) {
+      e.preventDefault();
 
-  document.getElementById('detalle-container').innerHTML = `
-    <div class="detalle-card">
-      <div class="detalle-header">
-        <div>
-          <div class="detalle-id">${report.id}</div>
-          <div class="detalle-tipo">${cat.icon} ${cat.label}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;">
-          <span class="badge ${meta.badge}">${report.estado}</span>
-          ${pri ? `<span class="badge ${pri.badge}">Prioridad ${report.prioridad}</span>` : ''}
-        </div>
-      </div>
-      <div class="detalle-field">
-        <div class="detalle-field-label">Descripción</div>
-        <div class="detalle-field-value">${report.descripcion}</div>
-      </div>
-      <div class="detalle-field">
-        <div class="detalle-field-label">Ubicación</div>
-        <div class="detalle-field-value">📍 ${report.ubicacion}</div>
-      </div>
-      <div class="detalle-field">
-        <div class="detalle-field-label">Fecha de ocurrencia</div>
-        <div class="detalle-field-value">📅 ${formatDate(report.fechaOcurrencia + 'T12:00:00')}</div>
-      </div>
-      <div class="detalle-field">
-        <div class="detalle-field-label">Fecha de creación del reporte</div>
-        <div class="detalle-field-value">🕐 ${formatDateTime(report.fechaCreacion)}</div>
-      </div>
-      ${report.evidencia ? `<div class="detalle-field"><div class="detalle-field-label">Evidencia adjunta</div><div class="detalle-field-value">📎 ${report.evidencia}</div></div>` : ''}
-      ${cancelBtn}
-    </div>
-    <div class="detalle-card">
-      <div class="detalle-section-title">🕓 Historial de Seguimiento</div>
-      <div class="timeline">${timelineHTML}</div>
-    </div>`;
+      const category    = document.getElementById('report-category').value;
+      const title       = document.getElementById('report-title').value.trim();
+      const description = document.getElementById('report-description').value.trim();
+      const location    = document.getElementById('report-location').value.trim();
+      const date        = document.getElementById('report-date').value;
+      const priority    = document.getElementById('report-priority').value;
+      const fileInputEl = document.getElementById('report-evidence');
 
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+      // Campos obligatorios
+      if (!category || !title || !description || !location || !date) {
+        alert('Por favor completa todos los campos obligatorios');
+        return;
+      }
 
-function cancelReport(id) {
-  const reports = getReports();
-  const idx = reports.findIndex(r => r.id === id);
-  if (idx === -1) return;
-  const session = getSession();
-  const now = new Date().toISOString();
-  reports[idx].estado = 'Cancelado';
-  reports[idx].historial.push({
-    estado: 'Cancelado',
-    fecha:  now,
-    actor:  session ? session.name : 'Ciudadano',
-    obs:    'Reporte cancelado por el ciudadano.'
-  });
-  saveReports(reports);
-  showDetail(id);
-  showToast('Reporte cancelado correctamente.', 'info');
-}
+      // CAS006: descripción 20–1000 chars
+      if (description.length < 20 || description.length > 1000) {
+        if (descError) descError.style.display = 'block';
+        descInput?.focus();
+        return;
+      }
 
-// ─────────────── FORM (CAS002) ───────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Load authenticated user info into navbar
-  loadUserUI();
+      // CAS006: fecha no futura
+      const selectedDate = new Date(date + 'T00:00:00');
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (selectedDate > today) {
+        if (dateError) dateError.style.display = 'block';
+        dateInput?.focus();
+        return;
+      }
 
-  // Set max date to today
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('fecha-ocurrencia').setAttribute('max', today);
-  document.getElementById('fecha-ocurrencia').value = today;
+      // CAS006: archivo ≤ 5 MB
+      if (fileInputEl.files.length > 0 && fileInputEl.files[0].size > 5 * 1024 * 1024) {
+        if (fileError) fileError.style.display = 'block';
+        return;
+      }
 
-  // Char counter
-  const desc = document.getElementById('descripcion');
-  desc.addEventListener('input', () => {
-    document.getElementById('char-count').textContent = desc.value.length;
-  });
+      const btn     = document.getElementById('btn-submit-report');
+      const btnText = btn.querySelector('.btn-text');
+      const spinner = btn.querySelector('.spinner');
 
-  // Validación inline al salir de cada campo (blur) — CAS002
-  document.getElementById('tipo-problema')?.addEventListener('change', () => {
-    const el = document.getElementById('tipo-problema');
-    const grupoOtro = document.getElementById('grupo-otro');
-    if (!el.value) showFieldError('tipo-problema', 'error-tipo');
-    else clearFieldError('tipo-problema');
-    grupoOtro.style.display = el.value === 'otro' ? 'block' : 'none';
-    if (el.value !== 'otro') document.getElementById('tipo-otro').value = '';
-  });
-  document.getElementById('descripcion')?.addEventListener('blur', () => {
-    const el = document.getElementById('descripcion');
-    if (el.value.trim().length < 20) showFieldError('descripcion', 'error-descripcion');
-    else clearFieldError('descripcion');
-  });
-  document.getElementById('ubicacion')?.addEventListener('blur', () => {
-    const el = document.getElementById('ubicacion');
-    if (!el.value.trim()) showFieldError('ubicacion', 'error-ubicacion');
-    else clearFieldError('ubicacion');
-  });
-  document.getElementById('fecha-ocurrencia')?.addEventListener('change', () => {
-    const el  = document.getElementById('fecha-ocurrencia');
-    const hoy = new Date().toISOString().split('T')[0];
-    if (!el.value || el.value > hoy) showFieldError('fecha-ocurrencia', 'error-fecha');
-    else clearFieldError('fecha-ocurrencia');
-  });
+      spinner.style.display = 'block';
+      btnText.textContent   = 'Guardando...';
+      btn.disabled          = true;
 
-  // Drag & drop
-  const dropArea = document.getElementById('file-upload-area');
-  dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.borderColor = 'var(--primary)'; });
-  dropArea.addEventListener('dragleave', () => { dropArea.style.borderColor = ''; });
-  dropArea.addEventListener('drop', e => {
-    e.preventDefault();
-    dropArea.style.borderColor = '';
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  });
+      try {
+        const session = await checkSession();
+        if (!session) return;
 
-  renderDashboard();
+        const { data: categorias, error: catError } = await window.supabase
+          .from('categorias')
+          .select('id, nombre')
+          .eq('nombre', getCategoryName(category))
+          .single();
+
+        if (catError || !categorias) throw new Error('No se encontró la categoría seleccionada');
+
+        let evidenceUrl = null;
+
+        if (fileInputEl.files.length > 0) {
+          const file     = fileInputEl.files[0];
+          const fileExt  = file.name.split('.').pop();
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+          const { error: uploadError } = await window.supabase.storage
+            .from('evidencias')
+            .upload(fileName, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data: urlData } = window.supabase.storage
+            .from('evidencias')
+            .getPublicUrl(fileName);
+
+          evidenceUrl = urlData.publicUrl;
+        }
+
+        const { data, error } = await window.supabase
+          .from('reportes')
+          .insert({
+            usuario_id:       session.user.id,
+            categoria_id:     categorias.id,
+            titulo:           title,
+            descripcion:      description,
+            ubicacion:        location,
+            latitud:          reportLat,
+            longitud:         reportLng,
+            fecha_ocurrencia: date,
+            prioridad:        formatPriority(priority),
+            evidencia_url:    evidenceUrl,
+            estado:           'Pendiente'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        alert('✅ Reporte creado exitosamente: ' + data.numero_caso);
+        formReport.reset();
+        if (descCount) { descCount.textContent = '0'; descCount.style.color = ''; }
+        // Resetear estado del mapa
+        if (reportMarker) { reportMarker.remove(); reportMarker = null; }
+        reportLat = null;
+        reportLng = null;
+        showView('my-reports');
+
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error al crear reporte: ' + error.message);
+      } finally {
+        spinner.style.display = 'none';
+        btnText.textContent   = 'Enviar Reporte';
+        btn.disabled          = false;
+      }
+    });
+  }
+
+  console.log('✅ App inicializada correctamente');
 });
 
-function handleFile(event) {
-  const file = event.target.files[0];
-  if (file) processFile(file);
-}
-
-function processFile(file) {
-  const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
-  const maxSize = 5 * 1024 * 1024;
-  const errEl = document.getElementById('error-archivo');
-
-  if (!allowed.includes(file.type) || file.size > maxSize) {
-    errEl.classList.add('visible');
-    document.getElementById('file-preview').style.display = 'none';
-    return;
-  }
-  errEl.classList.remove('visible');
-  const preview = document.getElementById('file-preview');
-  preview.style.display = 'flex';
-  preview.innerHTML = `✅ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-  window._attachedFile = file.name;
-}
-
-function getLocation() {
-  const btn = document.getElementById('btn-ubicacion-actual');
-  btn.textContent = '⏳ Obteniendo...';
-  btn.disabled = true;
-  if (!navigator.geolocation) {
-    showToast('Tu navegador no soporta geolocalización.', 'error');
-    btn.textContent = '📍 Ubicación actual';
-    btn.disabled = false;
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const { latitude: lat, longitude: lng } = pos.coords;
-      document.getElementById('ubicacion').value = `${lat.toFixed(6)}, ${lng.toFixed(6)} (GPS)`;
-      btn.textContent = '✅ Ubicación obtenida';
-      btn.disabled = false;
-      clearFieldError('ubicacion');
-    },
-    () => {
-      showToast('No se pudo obtener la ubicación. Ingrésala manualmente.', 'error');
-      btn.textContent = '📍 Ubicación actual';
-      btn.disabled = false;
-    }
-  );
-}
-
-function validateForm() {
-  let valid = true;
-  // Tipo
-  const tipo = document.getElementById('tipo-problema');
-  if (!tipo.value) { showFieldError('tipo-problema', 'error-tipo'); valid = false; }
-  else clearFieldError('tipo-problema');
-  // Tipo personalizado (Otro)
-  if (tipo.value === 'otro') {
-    const tipoOtro = document.getElementById('tipo-otro');
-    if (!tipoOtro.value.trim()) { showFieldError('tipo-otro', 'error-tipo-otro'); valid = false; }
-    else clearFieldError('tipo-otro');
-  }
-  // Descripción
-  const desc = document.getElementById('descripcion');
-  if (desc.value.trim().length < 20) { showFieldError('descripcion', 'error-descripcion'); valid = false; }
-  else clearFieldError('descripcion');
-  // Ubicación
-  const ubic = document.getElementById('ubicacion');
-  if (!ubic.value.trim()) { showFieldError('ubicacion', 'error-ubicacion'); valid = false; }
-  else clearFieldError('ubicacion');
-  // Fecha
-  const fecha = document.getElementById('fecha-ocurrencia');
-  const today = new Date().toISOString().split('T')[0];
-  if (!fecha.value || fecha.value > today) { showFieldError('fecha-ocurrencia', 'error-fecha'); valid = false; }
-  else clearFieldError('fecha-ocurrencia');
-  return valid;
-}
-
-function showFieldError(fieldId, errorId) {
-  document.getElementById(fieldId).classList.add('invalid');
-  document.getElementById(errorId).classList.add('visible');
-}
-
-function clearFieldError(fieldId) {
-  const fieldEl = document.getElementById(fieldId);
-  if (fieldEl) fieldEl.classList.remove('invalid');
-  // Find sibling error
-  const form = document.getElementById('report-form');
-  if (form) {
-    const errEl = form.querySelector(`#error-${fieldId}`);
-    if (errEl) errEl.classList.remove('visible');
-  }
-}
-
-function submitReport(event) {
-  event.preventDefault();
-  if (!validateForm()) {
-    showToast('Completa todos los campos requeridos correctamente.', 'error');
-    return;
-  }
-
-  const reports = getReports();
-  const newId = generateId();
-  const now = new Date().toISOString();
-
-  const newReport = {
-    id: newId,
-    tipo: document.getElementById('tipo-problema').value,
-    tipoPersonalizado: document.getElementById('tipo-problema').value === 'otro'
-      ? document.getElementById('tipo-otro').value.trim()
-      : null,
-    prioridad: null,
-    descripcion: document.getElementById('descripcion').value.trim(),
-    ubicacion: document.getElementById('ubicacion').value.trim(),
-    fechaOcurrencia: document.getElementById('fecha-ocurrencia').value,
-    fechaCreacion: now,
-    estado: 'Pendiente',
-    evidencia: window._attachedFile || null,
-    historial: [
-      { estado: 'Pendiente', fecha: now, actor: 'Sistema', obs: 'Reporte creado exitosamente. En espera de revisión.' }
-    ]
+// ─── Helpers de formulario ────────────────────────────────────────
+function getCategoryName(categoryValue) {
+  const map = {
+    'infraestructura': 'Infraestructura',
+    'alumbrado':       'Alumbrado Público',
+    'seguridad':       'Seguridad',
+    'basuras':         'Recolección de Basuras',
+    'vias':            'Vías y Calles',
+    'zonas-verdes':    'Zonas Verdes',
+    'acueducto':       'Acueducto',
+    'alcantarillado':  'Alcantarillado',
+    'otro':            'Otro'
   };
-
-  reports.push(newReport);
-  saveReports(reports);
-  window._attachedFile = null;
-
-  document.getElementById('modal-report-id').textContent = '#' + newId;
-  document.getElementById('success-modal').style.display = 'flex';
+  return map[categoryValue] || 'Otro';
 }
 
-function closeModal() {
-  document.getElementById('success-modal').style.display = 'none';
-  resetForm();
-  showView('mis-reportes');
-}
-
-function closeModalStay() {
-  document.getElementById('success-modal').style.display = 'none';
-  resetForm();
-}
-
-function resetForm() {
-  document.getElementById('report-form').reset();
-  document.getElementById('char-count').textContent = '0';
-  document.getElementById('file-preview').style.display = 'none';
-  window._attachedFile = null;
-  document.querySelectorAll('.form-error').forEach(e => e.classList.remove('visible'));
-  document.querySelectorAll('.invalid').forEach(e => e.classList.remove('invalid'));
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('fecha-ocurrencia').value = today;
-  document.getElementById('grupo-otro').style.display = 'none';
-  const gpsBtn = document.getElementById('btn-ubicacion-actual');
-  if (gpsBtn) { gpsBtn.textContent = '📍 Ubicación actual'; gpsBtn.disabled = false; }
-}
-
-// ─────────────── UTILS ───────────────
-function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatDateTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-let toastTimer;
-function showToast(msg, type = 'info') {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.className = 'toast show toast-' + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3500);
+function formatPriority(priority) {
+  const map = { 'baja': 'Baja', 'media': 'Media', 'alta': 'Alta', 'urgente': 'Urgente' };
+  return map[priority] || 'Media';
 }

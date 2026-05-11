@@ -1,311 +1,434 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Visión Barrial – Gestión de Incidencias</title>
-  <meta name="description"
-    content="Plataforma para reportar y hacer seguimiento de incidencias comunitarias. RF-002 / CAS002." />
+  <meta name="description" content="Plataforma para reportar y gestionar incidencias comunitarias en tu barrio." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 
-  <!-- Session guard — must run before any render -->
-  <script>
-    (function () {
-      const raw = sessionStorage.getItem('vb_session');
-      if (!raw) { window.location.replace('index.html'); }
-    })();
-  </script>
-</head>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <style>
+    .form-group:has(#report-map) {
+      overflow: hidden;
+    }
+    #report-map {
+      height: 300px;
+      border-radius: var(--radius-sm);
+      margin-top: 0.75rem;
+      border: 1.5px solid var(--border);
+      overflow: hidden;
+      position: relative;
+      z-index: 0;
+      max-width: 100%;
+    }
+    /* Evitar que los controles de Leaflet aparezcan sobre los modales */
+    .leaflet-top,
+    .leaflet-bottom { z-index: 400; }
+  </style>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  
+</head>
 <body>
 
-  <!-- ═══════════════════════ NAV ═══════════════════════ -->
-  <nav class="navbar" id="navbar">
-    <div class="nav-brand">
-      <span class="nav-icon">🏘️</span>
-      <span class="nav-title">Visión Barrial</span>
-    </div>
-    <div class="nav-links" id="navLinks">
-      <a href="#" class="nav-link active" data-view="dashboard" onclick="showView('dashboard');return false;">Inicio</a>
-      <a href="#" class="nav-link" data-view="reportar" onclick="showView('reportar');return false;">Reportar
-        Problema</a>
-      <a href="#" class="nav-link" data-view="mis-reportes" onclick="showView('mis-reportes');return false;">Mis
-        Reportes</a>
-    </div>
-    <div class="nav-user">
-      <div class="user-avatar" id="userAvatar">--</div>
-      <span class="user-name" id="userName">Cargando...</span>
-      <button class="btn-logout" id="btn-logout" onclick="logout()" title="Cerrar sesión">⎋ Salir</button>
-    </div>
-    <button class="hamburger" id="hamburger" onclick="toggleMenu()">☰</button>
-  </nav>
+<div class="app-container">
 
-  <!-- ═══════════════════════ VIEWS ═══════════════════════ -->
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">🏘️</div>
+      <h2 class="sidebar-brand">Visión<span>Barrial</span></h2>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-view="dashboard" onclick="showView('dashboard')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Panel Principal</span>
+      </button>
+
+      <button class="nav-item" data-view="report" onclick="showView('report')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Reportar Problema</span>
+      </button>
+
+      <button class="nav-item" data-view="my-reports" onclick="showView('my-reports')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Mis Reportes</span>
+      </button>
+
+      <button class="nav-item" data-view="search" onclick="showView('search')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <span>Buscar Reportes</span>
+      </button>
+
+      <button class="nav-item" data-view="admin" onclick="showView('admin')" style="display:none;" id="nav-admin">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg>
+        <span>Panel Administrativo</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-card" id="user-card">
+        <div class="user-avatar">👤</div>
+        <div class="user-info">
+          <p class="user-name" id="sidebar-user-name">Usuario</p>
+          <p class="user-role" id="sidebar-user-role">Ciudadano</p>
+        </div>
+      </div>
+      <button class="btn-logout" id="btn-logout">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Cerrar sesión
+      </button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════ -->
   <main class="main-content">
 
-    <!-- ── DASHBOARD ── -->
-    <section id="view-dashboard" class="view active">
-      <div class="hero-section hero-centered">
-        <div class="hero-content">
-          <div class="hero-badge">Plataforma Ciudadana</div>
-          <h1 class="hero-title">Gestión de Incidencias<br /><span class="gradient-text">Comunitarias</span></h1>
-          <p class="hero-subtitle">Reporta problemas en tu barrio, haz seguimiento en tiempo real y contribuye a mejorar
-            tu comunidad desde cualquier lugar del mundo.</p>
-          <div class="hero-actions">
-            <button class="btn btn-primary" onclick="showView('reportar')" id="btn-hero-reportar">
-              <span>📋</span> Reportar un Problema
-            </button>
-            <button class="btn btn-outline" onclick="showView('mis-reportes')" id="btn-hero-reportes">
-              <span>🔍</span> Ver Mis Reportes
-            </button>
-          </div>
+    <!-- Top Bar -->
+    <header class="topbar">
+      <button class="btn-menu" id="btn-menu" aria-label="Toggle menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title" id="topbar-title">Panel Principal</div>
+      <div class="topbar-user">
+        <div class="topbar-avatar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
+        <span class="topbar-user-name" id="topbar-user-name">Usuario</span>
       </div>
+    </header>
 
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon">📊</div>
-          <div class="stat-body">
-            <div class="stat-number" id="count-total">0</div>
-            <div class="stat-label">Total Reportes</div>
+    <!-- Content Views -->
+    <div class="content-wrapper">
+
+      <!-- ══════════════════════════════════════════
+           VIEW: DASHBOARD
+      ══════════════════════════════════════════ -->
+      <section class="view active" id="view-dashboard">
+        <div class="view-header">
+          <h1 class="view-title">Panel Principal</h1>
+          <p class="view-subtitle">Resumen de tus reportes y actividad reciente</p>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+          <div class="stat-card stat-pending">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-content">
+              <p class="stat-label">Pendientes</p>
+              <p class="stat-value" id="stat-pending">0</p>
+            </div>
+          </div>
+
+          <div class="stat-card stat-progress">
+            <div class="stat-icon">🔧</div>
+            <div class="stat-content">
+              <p class="stat-label">En Atención</p>
+              <p class="stat-value" id="stat-progress">0</p>
+            </div>
+          </div>
+
+          <div class="stat-card stat-resolved">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+              <p class="stat-label">Resueltos</p>
+              <p class="stat-value" id="stat-resolved">0</p>
+            </div>
+          </div>
+
+          <div class="stat-card stat-total">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+              <p class="stat-label">Total Reportes</p>
+              <p class="stat-value" id="stat-total">0</p>
+            </div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-body">
-            <div class="stat-number" id="count-pendiente">0</div>
-            <div class="stat-label">Pendientes</div>
+
+        <!-- Recent Reports Table -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Reportes Recientes</h3>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Categoría</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="recent-reports-tbody">
+                <tr>
+                  <td colspan="6" class="empty-state">No hay reportes recientes</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon">🔧</div>
-          <div class="stat-body">
-            <div class="stat-number" id="count-atencion">0</div>
-            <div class="stat-label">En Atención</div>
-          </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           VIEW: REPORT
+      ══════════════════════════════════════════ -->
+      <section class="view" id="view-report">
+        <div class="view-header">
+          <h1 class="view-title">Reportar Problema</h1>
+          <p class="view-subtitle">Completa el formulario para reportar una nueva incidencia</p>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon">✅</div>
-          <div class="stat-body">
-            <div class="stat-number" id="count-resuelto">0</div>
-            <div class="stat-label">Resueltos</div>
-          </div>
+
+        <div class="card">
+          <form class="report-form" id="form-report" novalidate>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="report-category">Categoría <span class="required">*</span></label>
+                <select id="report-category" class="form-control" required>
+                  <option value="">Selecciona una categoría</option>
+                  <option value="infraestructura">Infraestructura</option>
+                  <option value="alumbrado">Alumbrado Público</option>
+                  <option value="seguridad">Seguridad</option>
+                  <option value="basuras">Recolección de Basuras</option>
+                  <option value="vias">Vías y Calles</option>
+                  <option value="zonas-verdes">Zonas Verdes</option>
+                  <option value="acueducto">Acueducto</option>
+                  <option value="alcantarillado">Alcantarillado</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="report-title">Título del Reporte <span class="required">*</span></label>
+                <input type="text" id="report-title" class="form-control" placeholder="Ej: Bache en la calle principal" required />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="report-description">Descripción <span class="required">*</span></label>
+                <textarea id="report-description" class="form-control" rows="4" placeholder="Describe el problema con el mayor detalle posible..." required></textarea>
+                <span class="form-hint"><span id="desc-count">0</span>/1000 caracteres (mínimo 20)</span>
+                <span class="field-error" id="desc-error">La descripción debe tener entre 20 y 1000 caracteres.</span>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="report-location">Ubicación <span class="required">*</span></label>
+                <input type="text" id="report-location" class="form-control" placeholder="Haz clic en el mapa para autocompletar la dirección" required />
+                <div id="report-map"></div>
+                <span class="form-hint">Haz clic en el mapa para marcar la ubicación exacta del problema</span>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group half">
+                <label class="form-label" for="report-date">Fecha de Ocurrencia <span class="required">*</span></label>
+                <input type="date" id="report-date" class="form-control" required />
+                <span class="field-error" id="date-error">La fecha de ocurrencia no puede ser futura.</span>
+              </div>
+              <div class="form-group half">
+                <label class="form-label" for="report-priority">Prioridad</label>
+                <select id="report-priority" class="form-control">
+                  <option value="baja">Baja</option>
+                  <option value="media" selected>Media</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="report-evidence">Evidencia (Imagen o PDF)</label>
+                <input type="file" id="report-evidence" class="form-control" accept="image/jpeg,image/png,application/pdf" />
+                <span class="form-hint">Formatos: JPG, PNG o PDF. Tamaño máximo: 5 MB</span>
+                <span class="field-error" id="file-error">El archivo supera el límite de 5 MB. Por favor selecciona un archivo más pequeño.</span>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" onclick="document.getElementById('form-report').reset()">Limpiar</button>
+              <button type="submit" class="btn-primary" id="btn-submit-report">
+                <span class="btn-text">Enviar Reporte</span>
+                <div class="spinner" style="display:none"></div>
+              </button>
+            </div>
+          </form>
         </div>
-      </div>
+      </section>
 
-      <div class="section-header">
-        <h2 class="section-title">Reportes Recientes</h2>
-        <button class="btn btn-ghost" onclick="showView('mis-reportes')" id="btn-ver-todos">Ver todos →</button>
-      </div>
-      <div class="reports-list" id="recent-reports-list"></div>
-    </section>
-
-    <!-- ── REPORTAR PROBLEMA (CAS002) ── -->
-    <section id="view-reportar" class="view">
-      <div class="view-header">
-        <button class="btn-back" onclick="showView('dashboard')" id="btn-back-reportar">← Volver</button>
-        <div>
-          <h1 class="view-title">Reportar un Problema</h1>
-          <p class="view-subtitle">Documenta una incidencia en tu barrio</p>
+      <!-- ══════════════════════════════════════════
+           VIEW: MY REPORTS
+      ══════════════════════════════════════════ -->
+      <section class="view" id="view-my-reports">
+        <div class="view-header">
+          <h1 class="view-title">Mis Reportes</h1>
+          <p class="view-subtitle">Consulta el estado de todos tus reportes</p>
         </div>
-      </div>
 
-      <div class="form-container">
-        <form id="report-form" onsubmit="submitReport(event)" novalidate>
-
-          <div class="form-group">
-            <label class="form-label" for="tipo-problema">Tipo de Problema <span class="required">*</span></label>
-            <div class="select-wrapper">
-              <select id="tipo-problema" class="form-select" required>
-                <option value="">Selecciona una categoría</option>
-                <option value="infraestructura">🛣️ Infraestructura vial (baches, andenes)</option>
-                <option value="alumbrado">💡 Alumbrado público</option>
-                <option value="basuras">🗑️ Acumulación de basuras</option>
-                <option value="agua">💧 Problemas de agua / alcantarillado</option>
-                <option value="seguridad">🚨 Seguridad ciudadana</option>
-                <option value="espacio">🌳 Espacio público y parques</option>
-                <option value="ruido">🔊 Contaminación auditiva</option>
-                <option value="otro">📌 Otro</option>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Historial Completo</h3>
+            <div class="filter-group">
+              <select class="filter-select" id="filter-status">
+                <option value="">Todos los estados</option>
+                <option value="Pendiente">Pendiente</option>
+                <option value="En revisión">En revisión</option>
+                <option value="En atención">En atención</option>
+                <option value="Resuelto">Resuelto</option>
+                <option value="Rechazado">Rechazado</option>
               </select>
             </div>
-            <span class="form-error" id="error-tipo">Selecciona un tipo de problema válido.</span>
           </div>
-
-          <div class="form-group" id="grupo-otro" style="display:none">
-            <label class="form-label" for="tipo-otro">Especifica el tipo de problema <span class="required">*</span></label>
-            <input type="text" id="tipo-otro" class="form-input" placeholder="Ej: Contaminación visual, Árbol caído..." maxlength="80" />
-            <span class="form-error" id="error-tipo-otro">Describe el tipo de problema.</span>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Categoría</th>
+                  <th>Título</th>
+                  <th>Estado</th>
+                  <th>Prioridad</th>
+                  <th>Fecha</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="my-reports-tbody">
+                <tr>
+                  <td colspan="7" class="empty-state">No has creado reportes aún</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+        </div>
+      </section>
 
-          <div class="form-group">
-            <label class="form-label" for="descripcion">Descripción del Problema <span class="required">*</span></label>
-            <textarea id="descripcion" class="form-textarea"
-              placeholder="Describe detalladamente el problema (mínimo 20 caracteres, máximo 1000)..." minlength="20"
-              maxlength="1000" required rows="5"></textarea>
-            <div class="char-counter"><span id="char-count">0</span>/1000 caracteres</div>
-            <span class="form-error" id="error-descripcion">La descripción debe tener entre 20 y 1000 caracteres.</span>
-          </div>
+      <!-- ══════════════════════════════════════════
+           VIEW: SEARCH
+      ══════════════════════════════════════════ -->
+      <section class="view" id="view-search">
+        <div class="view-header">
+          <h1 class="view-title">Buscar Reportes</h1>
+          <p class="view-subtitle">Encuentra reportes por número, rango de fechas o palabra clave</p>
+        </div>
 
-          <div class="form-group">
-            <label class="form-label" for="ubicacion">Ubicación <span class="required">*</span></label>
-            <div class="location-input-group">
-              <input type="text" id="ubicacion" class="form-input" placeholder="Ej: Calle 72 #45-10, Barrio El Prado"
-                required />
-              <button type="button" class="btn-location" id="btn-ubicacion-actual" onclick="getLocation()">📍 Ubicación
-                actual</button>
+        <div class="card">
+          <div class="search-panel">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="search-number">Número de Reporte</label>
+                <input type="text" id="search-number" class="form-control" placeholder="Ej: VB-20240115-0001" />
+              </div>
             </div>
-            <span class="form-error" id="error-ubicacion">Ingresa la ubicación del problema.</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="fecha-ocurrencia">Fecha de Ocurrencia <span class="required">*</span></label>
-            <input type="date" id="fecha-ocurrencia" class="form-input" required />
-            <span class="form-error" id="error-fecha">La fecha no puede ser posterior a hoy.</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="evidencia">Evidencia Fotográfica / Documental <span
-                class="optional">(Opcional – JPG, PNG, PDF · Máx. 5 MB)</span></label>
-            <div class="file-upload-area" id="file-upload-area" onclick="document.getElementById('evidencia').click()">
-              <input type="file" id="evidencia" accept=".jpg,.jpeg,.png,.pdf" style="display:none"
-                onchange="handleFile(event)" />
-              <div class="file-upload-icon">📎</div>
-              <div class="file-upload-text">Arrastra tu archivo aquí o <span class="file-link">haz clic para
-                  seleccionar</span></div>
-              <div class="file-upload-hint">JPG, PNG o PDF — máximo 5 MB</div>
+            <div class="form-row">
+              <div class="form-group half">
+                <label class="form-label" for="search-date-from">Desde</label>
+                <input type="date" id="search-date-from" class="form-control" />
+              </div>
+              <div class="form-group half">
+                <label class="form-label" for="search-date-to">Hasta</label>
+                <input type="date" id="search-date-to" class="form-control" />
+              </div>
             </div>
-            <div class="file-preview" id="file-preview" style="display:none"></div>
-            <span class="form-error" id="error-archivo">Formato o tamaño no permitido (máx. 5 MB, solo
-              JPG/PNG/PDF).</span>
+            <button class="btn-primary" id="btn-search">Buscar</button>
           </div>
 
-          <div class="form-actions">
-            <button type="button" class="btn btn-outline" onclick="resetForm()" id="btn-limpiar">Limpiar
-              formulario</button>
-            <button type="submit" class="btn btn-primary" id="btn-submit-report">
-              <span class="btn-icon">📤</span>
-              <span class="btn-text">Enviar Reporte</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div class="modal-overlay" id="success-modal" style="display:none">
-        <div class="modal-card">
-          <div class="modal-icon">🎉</div>
-          <h2 class="modal-title">¡Reporte Enviado!</h2>
-          <p class="modal-subtitle">Tu reporte ha sido registrado exitosamente.</p>
-          <div class="modal-code">
-            <span>Número de reporte:</span>
-            <strong id="modal-report-id">#VB-0001</strong>
-          </div>
-          <p class="modal-info">Puedes hacer seguimiento en la sección <strong>Mis Reportes</strong>.</p>
-          <div class="modal-actions">
-            <button class="btn btn-primary" onclick="closeModal()" id="btn-modal-reportes">Ver Mis Reportes</button>
-            <button class="btn btn-outline" onclick="closeModalStay()" id="btn-modal-nuevo">Nuevo Reporte</button>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Categoría</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="search-results-tbody">
+                <tr>
+                  <td colspan="6" class="empty-state">Ingresa criterios de búsqueda</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ── MIS REPORTES (CAS003 / CAS005) ── -->
-    <section id="view-mis-reportes" class="view">
-      <div class="view-header">
-        <button class="btn-back" onclick="showView('dashboard')" id="btn-back-reportes">← Volver</button>
-        <div>
-          <h1 class="view-title">Mis Reportes</h1>
-          <p class="view-subtitle">Seguimiento y trazabilidad</p>
+      <!-- ══════════════════════════════════════════
+           VIEW: ADMIN
+      ══════════════════════════════════════════ -->
+      <section class="view" id="view-admin">
+        <div class="view-header">
+          <h1 class="view-title">Panel Administrativo</h1>
+          <p class="view-subtitle">Gestión de reportes y asignación de responsables</p>
         </div>
-      </div>
 
-      <div class="summary-bar">
-        <div class="summary-item"><span class="summary-dot dot-green"></span><span>Atendidos: <strong
-              id="sum-atendidos">0</strong></span></div>
-        <div class="summary-item"><span class="summary-dot dot-orange"></span><span>Pendientes: <strong
-              id="sum-pendientes">0</strong></span></div>
-        <div class="summary-item"><span class="summary-dot dot-blue"></span><span>En Atención: <strong
-              id="sum-atencion">0</strong></span></div>
-      </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Todos los Reportes</h3>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Usuario</th>
+                  <th>Categoría</th>
+                  <th>Estado</th>
+                  <th>Prioridad</th>
+                  <th>Fecha</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="admin-reports-tbody">
+                <tr>
+                  <td colspan="7" class="empty-state">No hay reportes en el sistema</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
-      <div class="filters-bar">
-        <div class="filter-group">
-          <label class="filter-label" for="filtro-tipo">Categoría</label>
-          <select id="filtro-tipo" class="form-select filter-select" onchange="applyFilters()">
-            <option value="">Todas</option>
-            <option value="infraestructura">🛣️ Infraestructura</option>
-            <option value="alumbrado">💡 Alumbrado</option>
-            <option value="basuras">🗑️ Basuras</option>
-            <option value="agua">💧 Agua</option>
-            <option value="seguridad">🚨 Seguridad</option>
-            <option value="espacio">🌳 Espacio público</option>
-            <option value="ruido">🔊 Ruido</option>
-            <option value="otro">📌 Otro</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label class="filter-label" for="filtro-estado">Estado</label>
-          <select id="filtro-estado" class="form-select filter-select" onchange="applyFilters()">
-            <option value="">Todos</option>
-            <option value="Pendiente">Pendiente</option>
-            <option value="En revisión">En revisión</option>
-            <option value="En atención">En atención</option>
-            <option value="Resuelto">Resuelto</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label class="filter-label" for="filtro-fecha-ini">Desde</label>
-          <input type="date" id="filtro-fecha-ini" class="form-input filter-input" onchange="applyFilters()" />
-        </div>
-        <div class="filter-group">
-          <label class="filter-label" for="filtro-fecha-fin">Hasta</label>
-          <input type="date" id="filtro-fecha-fin" class="form-input filter-input" onchange="applyFilters()" />
-        </div>
-        <div class="filter-group">
-          <label class="filter-label" for="filtro-busqueda">N° Reporte</label>
-          <input type="text" id="filtro-busqueda" class="form-input filter-input" placeholder="Buscar..."
-            oninput="applyFilters()" />
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="clearFilters()" id="btn-limpiar-filtros">Limpiar filtros</button>
-      </div>
-
-      <div class="reports-list" id="my-reports-list"></div>
-      <div id="empty-state" class="empty-state" style="display:none">
-        <div class="empty-icon">📭</div>
-        <h3>No se encontraron reportes</h3>
-        <p>No hay reportes con los filtros seleccionados.</p>
-        <button class="btn btn-outline" onclick="clearFilters()" id="btn-ampliar-busqueda">Ampliar búsqueda</button>
-      </div>
-      <div id="no-reports-state" class="empty-state" style="display:none">
-        <div class="empty-icon">📋</div>
-        <h3>Aún no tienes reportes</h3>
-        <p>¡Comienza reportando un problema en tu barrio!</p>
-        <button class="btn btn-primary" onclick="showView('reportar')" id="btn-primer-reporte">Hacer mi primer
-          reporte</button>
-      </div>
-    </section>
-
-    <!-- ── DETALLE (CAS003) ── -->
-    <section id="view-detalle" class="view">
-      <div class="view-header">
-        <button class="btn-back" onclick="showView('mis-reportes')" id="btn-back-detalle">← Volver</button>
-        <div>
-          <h1 class="view-title" id="detalle-titulo">Detalle del Reporte</h1>
-          <p class="view-subtitle">Historial y trazabilidad completa</p>
-        </div>
-      </div>
-      <div class="detalle-container" id="detalle-container"></div>
-    </section>
-
+    </div>
   </main>
 
-  <div class="toast" id="toast"></div>
+</div>
 
-  <script src="app.js"></script>
+<!-- Report Detail Modal -->
+<div class="modal" id="modal-detail">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 class="modal-title">Detalle del Reporte</h2>
+      <button class="modal-close" onclick="closeModal('modal-detail')">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-detail-body">
+      <!-- Dynamic content -->
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
 </body>
-
 </html>

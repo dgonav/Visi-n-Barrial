@@ -826,12 +826,26 @@ body {
 @media (max-width: 768px) {
   .auth-right { padding: 2rem 1.25rem; }
   .auth-card  { width: 100%; border-radius: 18px; }
+
+  /* Mínimo 16px para evitar zoom automático de iOS */
+  .field-input { font-size: 16px; }
+
+  /* Footer CUC en columna centrada */
+  .academic-footer {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    font-size: 0.72rem;
+  }
+  .academic-footer img { height: 36px; }
 }
 
 @media (max-width: 480px) {
   .auth-right { padding: 1.5rem 1rem; }
   .auth-card  { padding: 1.75rem 1.25rem; border-radius: 14px; }
   .auth-title { font-size: 1.75rem; }
+  .field-input { font-size: 16px; }
 }
 
 /* ══════════════════════════════════════════

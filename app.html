@@ -93,6 +93,9 @@
     </div>
   </aside>
 
+  <!-- Overlay oscuro detrás del sidebar en móvil -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
   <!-- ══════════════════════════════════════════
        MAIN CONTENT
   ══════════════════════════════════════════ -->
@@ -439,22 +442,79 @@
   (function () {
     var sidebar = document.getElementById('sidebar');
 
-    // Restaurar estado antes del primer paint para evitar flash
+    // Restaurar estado del sidebar colapsado antes del primer paint
     if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
       sidebar.classList.add('collapsed');
     }
 
-    // Sobreescribir toggleMenu (app.js lo registra en DOMContentLoaded, que aún no ha disparado)
+    function getOverlay() { return document.getElementById('sidebar-overlay'); }
+
+    // toggleMenu: colapso en desktop, slide + overlay en móvil
     window.toggleMenu = function () {
       var sb = document.getElementById('sidebar');
+      var ov = getOverlay();
       if (!sb) return;
       if (window.innerWidth > 768) {
         sb.classList.toggle('collapsed');
         localStorage.setItem('sidebarCollapsed', sb.classList.contains('collapsed'));
       } else {
-        sb.classList.toggle('open');
+        var isOpen = sb.classList.toggle('open');
+        if (ov) ov.classList.toggle('active', isOpen);
       }
     };
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var ov = getOverlay();
+
+      // Cerrar sidebar al tocar el overlay
+      if (ov) {
+        ov.addEventListener('click', function () {
+          var sb = document.getElementById('sidebar');
+          if (sb) sb.classList.remove('open');
+          ov.classList.remove('active');
+        });
+      }
+
+      // Cerrar sidebar al navegar en móvil
+      document.querySelectorAll('.nav-item').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (window.innerWidth <= 768) {
+            var sb = document.getElementById('sidebar');
+            if (sb) sb.classList.remove('open');
+            var ov2 = getOverlay();
+            if (ov2) ov2.classList.remove('active');
+          }
+        });
+      });
+
+      // MutationObserver: añade data-label a las filas generadas dinámicamente
+      // para que el CSS de modo card muestre la etiqueta de cada columna.
+      var tableLabels = {
+        'recent-reports-tbody': ['Número','Categoría','Descripción','Estado','Fecha','Acciones'],
+        'my-reports-tbody':     ['Número','Categoría','Título','Estado','Prioridad','Fecha','Acciones'],
+        'search-results-tbody': ['Número','Categoría','Descripción','Estado','Fecha','Acciones'],
+        'admin-reports-tbody':  ['Número','Usuario','Categoría','Estado','Prioridad','Fecha','Acciones']
+      };
+
+      function applyLabels(tbody, labels) {
+        tbody.querySelectorAll('tr').forEach(function (tr) {
+          tr.querySelectorAll('td').forEach(function (td, i) {
+            if (!td.hasAttribute('colspan') && labels[i]) {
+              td.setAttribute('data-label', labels[i]);
+            }
+          });
+        });
+      }
+
+      Object.keys(tableLabels).forEach(function (id) {
+        var tbody = document.getElementById(id);
+        if (!tbody) return;
+        var labels = tableLabels[id];
+        new MutationObserver(function () {
+          applyLabels(tbody, labels);
+        }).observe(tbody, { childList: true });
+      });
+    });
   })();
 </script>
 </body>

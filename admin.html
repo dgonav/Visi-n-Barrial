@@ -127,7 +127,7 @@
 
     /* ── Management modal ───────────────────────────── */
     #modal-manage .modal-content {
-      max-width: 940px;
+      max-width: 940px; /* reducido a 100% en móvil vía media query */
     }
     .manage-grid {
       display: grid;
@@ -203,13 +203,16 @@
       .cat-bar-row         { grid-template-columns: 110px 1fr 34px; }
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: 768px) {
+      /* Modal gestión pantalla completa en móvil */
+      #modal-manage { align-items: stretch; padding: 0; }
       #modal-manage .modal-content {
-        border-radius: var(--radius-md) var(--radius-md) 0 0;
-        max-height: 96vh;
-        margin-top: auto;
+        border-radius: 0;
+        max-width: 100%;
+        width: 100%;
+        max-height: 100vh;
+        overflow-y: auto;
       }
-      #modal-manage { align-items: flex-end; }
     }
   </style>
 
@@ -255,6 +258,9 @@
       </button>
     </div>
   </aside>
+
+  <!-- Overlay oscuro detrás del sidebar en móvil -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <!-- ══════════════════════════════════════════
        MAIN CONTENT
@@ -445,7 +451,7 @@
      MODAL: GESTIÓN DE REPORTE
 ══════════════════════════════════════════ -->
 <div class="modal" id="modal-manage">
-  <div class="modal-content" style="max-width:920px;">
+  <div class="modal-content">
     <div class="modal-header">
       <h2 class="modal-title">Gestión de Reporte</h2>
       <button class="modal-close" onclick="closeModal('modal-manage')" aria-label="Cerrar">&times;</button>
@@ -461,25 +467,64 @@
   (function () {
     var sidebar = document.getElementById('sidebar');
 
-    // Restaurar estado antes del primer paint para evitar flash
+    // Restaurar estado del sidebar colapsado antes del primer paint
     if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
       sidebar.classList.add('collapsed');
     }
 
-    // El handler de admin.js (anónimo) se registra dentro de DOMContentLoaded, por eso
-    // agregamos el nuestro también en DOMContentLoaded para que se ejecute después y pueda
-    // limpiar el .open que admin.js añade innecesariamente en desktop.
     document.addEventListener('DOMContentLoaded', function () {
       var sb  = document.getElementById('sidebar');
       var btn = document.getElementById('btn-menu');
-      if (!btn || !sb) return;
-      btn.addEventListener('click', function () {
-        if (window.innerWidth > 768) {
-          sb.classList.toggle('collapsed');
-          sb.classList.remove('open'); // neutraliza el toggle de admin.js en desktop
-          localStorage.setItem('sidebarCollapsed', sb.classList.contains('collapsed'));
-        }
+      var ov  = document.getElementById('sidebar-overlay');
+
+      if (btn && sb) {
+        // Segundo listener que se ejecuta DESPUÉS del de admin.js:
+        // en desktop → colapso; en móvil → sincroniza overlay con el .open
+        // que admin.js ya alternó.
+        btn.addEventListener('click', function () {
+          if (window.innerWidth > 768) {
+            sb.classList.toggle('collapsed');
+            sb.classList.remove('open');
+            localStorage.setItem('sidebarCollapsed', sb.classList.contains('collapsed'));
+          } else {
+            // .open ya fue alternado por admin.js; sincronizar overlay
+            if (ov) ov.classList.toggle('active', sb.classList.contains('open'));
+          }
+        });
+      }
+
+      // Cerrar sidebar al tocar el overlay
+      if (ov) {
+        ov.addEventListener('click', function () {
+          if (sb) sb.classList.remove('open');
+          ov.classList.remove('active');
+        });
+      }
+
+      // Cerrar sidebar al navegar en móvil
+      document.querySelectorAll('.nav-item').forEach(function (navBtn) {
+        navBtn.addEventListener('click', function () {
+          if (window.innerWidth <= 768) {
+            if (sb) sb.classList.remove('open');
+            if (ov) ov.classList.remove('active');
+          }
+        });
       });
+
+      // MutationObserver: añade data-label a las filas generadas dinámicamente
+      var allReportsTbody = document.getElementById('all-reports-tbody');
+      if (allReportsTbody) {
+        var labels = ['Número','Ciudadano','Categoría','Título','Estado','Prioridad','Entidad','Fecha','Acción'];
+        new MutationObserver(function () {
+          allReportsTbody.querySelectorAll('tr').forEach(function (tr) {
+            tr.querySelectorAll('td').forEach(function (td, i) {
+              if (!td.hasAttribute('colspan') && labels[i]) {
+                td.setAttribute('data-label', labels[i]);
+              }
+            });
+          });
+        }).observe(allReportsTbody, { childList: true });
+      }
     });
   })();
 </script>

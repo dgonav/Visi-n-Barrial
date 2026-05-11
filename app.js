@@ -528,9 +528,37 @@ async function updateLocationFromCoords(lat, lng) {
   }
 }
 
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  const ov = document.getElementById('sidebar-overlay');
+  if (ov) ov.remove();
+}
+
 function toggleMenu() {
   const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.classList.toggle('open');
+  if (!sidebar) return;
+
+  if (window.innerWidth > 768) {
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+  } else {
+    const isOpen = sidebar.classList.toggle('open');
+    if (isOpen) {
+      const overlay = document.createElement('div');
+      overlay.id = 'sidebar-overlay';
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        inset:    '0',
+        zIndex:   '99',
+        background: 'rgba(0,0,0,0.5)'
+      });
+      overlay.addEventListener('click', closeSidebar);
+      document.body.appendChild(overlay);
+    } else {
+      closeSidebar();
+    }
+  }
 }
 
 function closeModal(modalId) {
@@ -550,6 +578,13 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Mobile menu
   const btnMenu = document.getElementById('btn-menu');
   if (btnMenu) btnMenu.addEventListener('click', toggleMenu);
+
+  // Cerrar sidebar al navegar en móvil
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 768) closeSidebar();
+    });
+  });
 
   // ── CAS006: contador y validación de descripción ──────────────
   const descInput = document.getElementById('report-description');

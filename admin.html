@@ -259,9 +259,6 @@
     </div>
   </aside>
 
-  <!-- Overlay oscuro detrás del sidebar en móvil -->
-  <div class="sidebar-overlay" id="sidebar-overlay"></div>
-
   <!-- ══════════════════════════════════════════
        MAIN CONTENT
   ══════════════════════════════════════════ -->
@@ -465,53 +462,15 @@
 <script src="admin.js"></script>
 <script>
   (function () {
+    // Restaurar estado colapsado antes del primer paint (evita flash)
     var sidebar = document.getElementById('sidebar');
-
-    // Restaurar estado del sidebar colapsado antes del primer paint
     if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
       sidebar.classList.add('collapsed');
     }
 
+    // MutationObserver: añade data-label a filas generadas dinámicamente
+    // para que el CSS de modo card muestre la etiqueta de cada columna.
     document.addEventListener('DOMContentLoaded', function () {
-      var sb  = document.getElementById('sidebar');
-      var btn = document.getElementById('btn-menu');
-      var ov  = document.getElementById('sidebar-overlay');
-
-      if (btn && sb) {
-        // Segundo listener que se ejecuta DESPUÉS del de admin.js:
-        // en desktop → colapso; en móvil → sincroniza overlay con el .open
-        // que admin.js ya alternó.
-        btn.addEventListener('click', function () {
-          if (window.innerWidth > 768) {
-            sb.classList.toggle('collapsed');
-            sb.classList.remove('open');
-            localStorage.setItem('sidebarCollapsed', sb.classList.contains('collapsed'));
-          } else {
-            // .open ya fue alternado por admin.js; sincronizar overlay
-            if (ov) ov.classList.toggle('active', sb.classList.contains('open'));
-          }
-        });
-      }
-
-      // Cerrar sidebar al tocar el overlay
-      if (ov) {
-        ov.addEventListener('click', function () {
-          if (sb) sb.classList.remove('open');
-          ov.classList.remove('active');
-        });
-      }
-
-      // Cerrar sidebar al navegar en móvil
-      document.querySelectorAll('.nav-item').forEach(function (navBtn) {
-        navBtn.addEventListener('click', function () {
-          if (window.innerWidth <= 768) {
-            if (sb) sb.classList.remove('open');
-            if (ov) ov.classList.remove('active');
-          }
-        });
-      });
-
-      // MutationObserver: añade data-label a las filas generadas dinámicamente
       var allReportsTbody = document.getElementById('all-reports-tbody');
       if (allReportsTbody) {
         var labels = ['Número','Ciudadano','Categoría','Título','Estado','Prioridad','Entidad','Fecha','Acción'];

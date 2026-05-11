@@ -459,6 +459,30 @@ function closeModal(id) {
   if (modal) modal.style.display = 'none';
 }
 
+// ─── Sidebar móvil ────────────────────────────────────────────
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  const ov = document.getElementById('sidebar-overlay');
+  if (ov) ov.remove();
+}
+
+function openSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  sidebar.classList.add('open');
+  const overlay = document.createElement('div');
+  overlay.id = 'sidebar-overlay';
+  Object.assign(overlay.style, {
+    position:   'fixed',
+    inset:      '0',
+    zIndex:     '99',
+    background: 'rgba(0,0,0,0.5)'
+  });
+  overlay.addEventListener('click', closeSidebar);
+  document.body.appendChild(overlay);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 function setEl(id, value) {
   const el = document.getElementById(id);
@@ -524,9 +548,24 @@ document.addEventListener('DOMContentLoaded', async function () {
     window.location.href = 'index.html';
   });
 
-  // Mobile menu
+  // Menú: colapso en desktop, overlay deslizable en móvil
   document.getElementById('btn-menu')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.toggle('open');
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    if (window.innerWidth > 768) {
+      sidebar.classList.toggle('collapsed');
+      sidebar.classList.remove('open');
+      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    } else {
+      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+    }
+  });
+
+  // Cerrar sidebar al navegar en móvil
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 768) closeSidebar();
+    });
   });
 
   // Filtro por período (dashboard)

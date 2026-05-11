@@ -93,9 +93,6 @@
     </div>
   </aside>
 
-  <!-- Overlay oscuro detrás del sidebar en móvil -->
-  <div class="sidebar-overlay" id="sidebar-overlay"></div>
-
   <!-- ══════════════════════════════════════════
        MAIN CONTENT
   ══════════════════════════════════════════ -->
@@ -440,55 +437,15 @@
 <script src="app.js"></script>
 <script>
   (function () {
+    // Restaurar estado colapsado antes del primer paint (evita flash)
     var sidebar = document.getElementById('sidebar');
-
-    // Restaurar estado del sidebar colapsado antes del primer paint
     if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
       sidebar.classList.add('collapsed');
     }
 
-    function getOverlay() { return document.getElementById('sidebar-overlay'); }
-
-    // toggleMenu: colapso en desktop, slide + overlay en móvil
-    window.toggleMenu = function () {
-      var sb = document.getElementById('sidebar');
-      var ov = getOverlay();
-      if (!sb) return;
-      if (window.innerWidth > 768) {
-        sb.classList.toggle('collapsed');
-        localStorage.setItem('sidebarCollapsed', sb.classList.contains('collapsed'));
-      } else {
-        var isOpen = sb.classList.toggle('open');
-        if (ov) ov.classList.toggle('active', isOpen);
-      }
-    };
-
+    // MutationObserver: añade data-label a filas generadas dinámicamente
+    // para que el CSS de modo card muestre la etiqueta de cada columna.
     document.addEventListener('DOMContentLoaded', function () {
-      var ov = getOverlay();
-
-      // Cerrar sidebar al tocar el overlay
-      if (ov) {
-        ov.addEventListener('click', function () {
-          var sb = document.getElementById('sidebar');
-          if (sb) sb.classList.remove('open');
-          ov.classList.remove('active');
-        });
-      }
-
-      // Cerrar sidebar al navegar en móvil
-      document.querySelectorAll('.nav-item').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          if (window.innerWidth <= 768) {
-            var sb = document.getElementById('sidebar');
-            if (sb) sb.classList.remove('open');
-            var ov2 = getOverlay();
-            if (ov2) ov2.classList.remove('active');
-          }
-        });
-      });
-
-      // MutationObserver: añade data-label a las filas generadas dinámicamente
-      // para que el CSS de modo card muestre la etiqueta de cada columna.
       var tableLabels = {
         'recent-reports-tbody': ['Número','Categoría','Descripción','Estado','Fecha','Acciones'],
         'my-reports-tbody':     ['Número','Categoría','Título','Estado','Prioridad','Fecha','Acciones'],

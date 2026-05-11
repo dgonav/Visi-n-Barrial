@@ -910,16 +910,6 @@ textarea.form-control { resize: vertical; min-height: 110px; }
    RESPONSIVE
 ══════════════════════════════════════════ */
 
-/* Overlay del sidebar (solo activo en móvil vía JS) */
-.sidebar-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.52);
-  z-index: 99;
-  -webkit-tap-highlight-color: transparent;
-}
-
 @media (max-width: 768px) {
   /* ── Sidebar deslizable ── */
   .sidebar {
@@ -932,8 +922,6 @@ textarea.form-control { resize: vertical; min-height: 110px; }
     transform: translateX(0);
     box-shadow: 8px 0 52px rgba(0,0,0,0.42);
   }
-
-  .sidebar-overlay.active { display: block; }
 
   /* ── Layout ── */
   .main-content { margin-left: 0; }

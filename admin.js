@@ -528,6 +528,29 @@ function stateBadge(estado) {
 
 // ─── Init ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
+
+  // ── Listeners de sidebar: sin dependencia de auth ni awaits ──
+  // Se registran de inmediato para que el botón hamburguesa funcione
+  // desde el primer momento, igual que toggleMenu en app.js.
+  document.getElementById('btn-menu')?.addEventListener('click', () => {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    if (window.innerWidth > 768) {
+      sidebar.classList.toggle('collapsed');
+      sidebar.classList.remove('open');
+      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    } else {
+      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+    }
+  });
+
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 768) closeSidebar();
+    });
+  });
+
+  // ── Auth guard (puede redirigir; si falla, los listeners ya están asignados) ──
   const auth = await checkAdminSession();
   if (!auth) return;
 
@@ -546,26 +569,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   document.getElementById('btn-logout')?.addEventListener('click', async () => {
     await window.supabase.auth.signOut();
     window.location.href = 'index.html';
-  });
-
-  // Menú: colapso en desktop, overlay deslizable en móvil
-  document.getElementById('btn-menu')?.addEventListener('click', () => {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
-    if (window.innerWidth > 768) {
-      sidebar.classList.toggle('collapsed');
-      sidebar.classList.remove('open');
-      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-    } else {
-      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-    }
-  });
-
-  // Cerrar sidebar al navegar en móvil
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (window.innerWidth <= 768) closeSidebar();
-    });
   });
 
   // Filtro por período (dashboard)

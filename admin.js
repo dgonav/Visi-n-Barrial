@@ -469,7 +469,7 @@ function closeSidebar() {
 
 function openSidebar() {
   const sidebar = document.getElementById('sidebar');
-  if (!sidebar) return;
+  if (!sidebar || sidebar.classList.contains('open')) return;
   sidebar.classList.add('open');
   const overlay = document.createElement('div');
   overlay.id = 'sidebar-overlay';
@@ -532,22 +532,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ── Listeners de sidebar: sin dependencia de auth ni awaits ──
   // Se registran de inmediato para que el botón hamburguesa funcione
   // desde el primer momento, igual que toggleMenu en app.js.
-  document.getElementById('btn-menu')?.addEventListener('click', () => {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
-    if (window.innerWidth > 768) {
-      sidebar.classList.toggle('collapsed');
-      sidebar.classList.remove('open');
-      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-    } else {
-      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-    }
-  });
+  document.getElementById('btn-menu')?.addEventListener('click', openSidebar);
 
   document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (window.innerWidth <= 768) closeSidebar();
-    });
+    btn.addEventListener('click', closeSidebar);
   });
 
   // ── Auth guard (puede redirigir; si falla, los listeners ya están asignados) ──

@@ -833,3 +833,21 @@ body {
   .auth-card  { padding: 1.75rem 1.25rem; border-radius: 14px; }
   .auth-title { font-size: 1.75rem; }
 }
+
+/* ══════════════════════════════════════════
+   ACADEMIC FOOTER
+══════════════════════════════════════════ */
+.academic-footer {
+  margin-top: auto;
+  padding: 1rem 2rem;
+  background: #F5F7FA;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  align-self: stretch;
+}

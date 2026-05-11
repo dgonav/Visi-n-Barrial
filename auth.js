@@ -244,7 +244,7 @@ async function signInWithGoogle() {
   try {
     const { error } = await window.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/app.html' }
+      options: { redirectTo: 'https://visionbarrial.netlify.app/app.html' }
     });
     if (error) throw error;
   } catch (error) {

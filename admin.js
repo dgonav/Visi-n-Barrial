@@ -491,18 +491,17 @@ function openSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
   sidebar.classList.add('open');
-  if (!document.getElementById('sidebar-overlay')) {
-    const overlay = document.createElement('div');
-    overlay.id = 'sidebar-overlay';
-    Object.assign(overlay.style, {
-      position:   'fixed',
-      inset:      '0',
-      zIndex:     '99',
-      background: 'rgba(0,0,0,0.5)'
-    });
-    overlay.addEventListener('click', closeSidebar);
-    document.body.appendChild(overlay);
-  }
+  if (document.getElementById('sidebar-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'sidebar-overlay';
+  Object.assign(overlay.style, {
+    position:   'fixed',
+    inset:      '0',
+    zIndex:     '199',
+    background: 'rgba(0,0,0,0.5)'
+  });
+  overlay.addEventListener('click', closeSidebar);
+  document.body.appendChild(overlay);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────

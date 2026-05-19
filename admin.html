@@ -289,11 +289,17 @@
             <h1 class="view-title">Dashboard Global</h1>
             <p class="view-subtitle">Estadísticas de todos los reportes del sistema</p>
           </div>
-          <div class="period-group" role="group" aria-label="Período">
-            <button class="period-btn period-btn-active" data-period="all">Todo</button>
-            <button class="period-btn" data-period="7d">7 días</button>
-            <button class="period-btn" data-period="30d">30 días</button>
-            <button class="period-btn" data-period="90d">3 meses</button>
+          <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+            <div class="period-group" role="group" aria-label="Período">
+              <button class="period-btn period-btn-active" data-period="all">Todo</button>
+              <button class="period-btn" data-period="7d">7 días</button>
+              <button class="period-btn" data-period="30d">30 días</button>
+              <button class="period-btn" data-period="90d">3 meses</button>
+            </div>
+            <input type="text" id="dash-filter-barrio" class="form-control"
+              placeholder="Filtrar por barrio..."
+              autocomplete="off"
+              style="width:175px;font-size:0.82rem;" />
           </div>
         </div>
 
@@ -402,10 +408,17 @@
                 <label class="form-label" for="filter-date-to">Hasta</label>
                 <input type="date" id="filter-date-to" class="form-control" />
               </div>
+              <div class="form-group">
+                <label class="form-label" for="filter-barrio">Barrio / Zona</label>
+                <input type="text" id="filter-barrio" class="form-control" placeholder="Ej: El Prado, Boston..." autocomplete="off" />
+              </div>
             </div>
             <div class="filter-actions">
               <button class="btn-primary" id="btn-apply-filters">Aplicar filtros</button>
               <button class="btn-secondary" id="btn-clear-filters">Limpiar</button>
+              <button class="btn-secondary" id="btn-export-csv">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
+              </button>
             </div>
           </div>
 
@@ -417,6 +430,7 @@
                   <th>Número</th>
                   <th>Ciudadano</th>
                   <th>Categoría</th>
+                  <th>Barrio</th>
                   <th>Título</th>
                   <th>Estado</th>
                   <th>Prioridad</th>
@@ -427,7 +441,7 @@
               </thead>
               <tbody id="all-reports-tbody">
                 <tr>
-                  <td colspan="9" class="empty-state">Cargando reportes...</td>
+                  <td colspan="10" class="empty-state">Cargando reportes...</td>
                 </tr>
               </tbody>
             </table>

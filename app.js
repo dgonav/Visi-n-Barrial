@@ -13,6 +13,7 @@ let reportMap    = null;
 let reportMarker = null;
 let reportLat    = null;
 let reportLng    = null;
+let reportBarrio = null;
 
 // ─── Session & Auth ─────────────────────────────────────────
 async function checkSession() {
@@ -475,6 +476,65 @@ function stateBadge(estado) {
   return map[estado] || (estado || '').toLowerCase().replace(/\s+/g, '-');
 }
 
+// ─── Notificaciones ───────────────────────────────────────
+async function loadNotifications() {
+  if (!currentUserId) return;
+
+  const { data, error } = await window.supabase
+    .from('notificaciones')
+    .select('*')
+    .eq('usuario_id', currentUserId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) { console.error('Error notificaciones:', error); return; }
+
+  const unread = (data || []).filter(n => !n.leida).length;
+  const badge  = document.getElementById('notif-badge');
+  if (badge) {
+    badge.style.display = unread > 0 ? 'flex' : 'none';
+    badge.textContent   = unread > 9 ? '9+' : unread;
+  }
+
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+
+  if (!data || data.length === 0) {
+    list.innerHTML = '<p class="notif-empty">No tienes notificaciones</p>';
+    return;
+  }
+
+  list.innerHTML = `<div class="notif-list-scroll">${data.map(n => `
+    <div class="notif-item ${n.leida ? '' : 'unread'}" data-id="${n.id}" data-reporte="${n.reporte_id}">
+      <span>${escapeHtml(n.mensaje)}</span>
+      <span class="notif-time">${formatDateTime(n.created_at)}</span>
+    </div>
+  `).join('')}</div>`;
+
+  list.querySelectorAll('.notif-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      const notifId = el.dataset.id;
+      await window.supabase
+        .from('notificaciones')
+        .update({ leida: true })
+        .eq('id', notifId);
+      document.getElementById('notif-dropdown').style.display = 'none';
+      showView('my-reports');
+      loadNotifications();
+    });
+  });
+}
+
+async function markAllAsRead() {
+  if (!currentUserId) return;
+  await window.supabase
+    .from('notificaciones')
+    .update({ leida: true })
+    .eq('usuario_id', currentUserId)
+    .eq('leida', false);
+  loadNotifications();
+}
+
 // ─── Mapa interactivo (Leaflet + OpenStreetMap) ───────────
 function initReportMap() {
   if (reportMap) {
@@ -522,6 +582,9 @@ async function updateLocationFromCoords(lat, lng) {
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`
     );
     const data = await res.json();
+    const addr = data.address || {};
+    reportBarrio = addr.suburb || addr.neighbourhood || addr.city_district
+                 || addr.town  || addr.village || null;
     if (input) input.value = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   } catch (_) {
     if (input) input.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
@@ -570,6 +633,32 @@ function closeModal(modalId) {
 document.addEventListener('DOMContentLoaded', async function () {
   await loadUserUI();
   loadDashboard();
+
+  loadNotifications();
+  setInterval(loadNotifications, 60000);
+
+  const btnNotif = document.getElementById('btn-notif');
+  const dropdown = document.getElementById('notif-dropdown');
+  if (btnNotif && dropdown) {
+    btnNotif.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.style.display === 'block';
+      dropdown.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) loadNotifications();
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    const wrapper = document.getElementById('notif-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) {
+      if (dropdown) dropdown.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btn-mark-all-read')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    markAllAsRead();
+  });
 
   // Logout
   const btnLogout = document.getElementById('btn-logout');
@@ -733,6 +822,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             ubicacion:        location,
             latitud:          reportLat,
             longitud:         reportLng,
+            barrio:           reportBarrio,
             fecha_ocurrencia: date,
             prioridad:        formatPriority(priority),
             evidencia_url:    evidenceUrl,
@@ -748,8 +838,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (descCount) { descCount.textContent = '0'; descCount.style.color = ''; }
         // Resetear estado del mapa
         if (reportMarker) { reportMarker.remove(); reportMarker = null; }
-        reportLat = null;
-        reportLng = null;
+        reportLat    = null;
+        reportLng    = null;
+        reportBarrio = null;
         showView('my-reports');
 
       } catch (error) {

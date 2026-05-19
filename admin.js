@@ -60,7 +60,7 @@ function showView(viewName) {
   const el = document.getElementById('topbar-title');
   if (el) el.textContent = titles[viewName] || 'Panel Administrativo';
 
-  if (viewName === 'dashboard')    loadDashboard(currentPeriod);
+  if (viewName === 'dashboard')    loadDashboard(currentPeriod, document.getElementById('dash-filter-barrio')?.value.trim() || '');
   if (viewName === 'all-reports')  loadAllReports();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -83,7 +83,7 @@ async function loadCategorias() {
 }
 
 // ─── Dashboard Global ─────────────────────────────────────────
-async function loadDashboard(period = 'all') {
+async function loadDashboard(period = 'all', barrio = '') {
   currentPeriod = period;
 
   // Resaltar botón activo
@@ -101,6 +101,7 @@ async function loadDashboard(period = 'all') {
       const from = new Date(Date.now() - (daysMap[period] || 7) * 86400000).toISOString();
       query = query.gte('created_at', from);
     }
+    if (barrio) query = query.ilike('barrio', `%${barrio}%`);
 
     const { data: reportes, error } = await query;
     if (error) throw error;
@@ -172,9 +173,10 @@ async function loadAllReports() {
   const categoria = document.getElementById('filter-categoria')?.value    || '';
   const dateFrom  = document.getElementById('filter-date-from')?.value    || '';
   const dateTo    = document.getElementById('filter-date-to')?.value      || '';
+  const barrio    = document.getElementById('filter-barrio')?.value.trim() || '';
 
   const tbody = document.getElementById('all-reports-tbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Cargando...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Cargando...</td></tr>';
 
   try {
     let query = window.supabase
@@ -186,6 +188,7 @@ async function loadAllReports() {
     if (categoria) query = query.eq('categoria_id', categoria);
     if (dateFrom)  query = query.gte('created_at', dateFrom);
     if (dateTo)    query = query.lte('created_at', dateTo + 'T23:59:59');
+    if (barrio)    query = query.ilike('barrio', `%${barrio}%`);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -193,7 +196,7 @@ async function loadAllReports() {
     if (!tbody) return;
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No se encontraron reportes con los filtros seleccionados</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No se encontraron reportes con los filtros seleccionados</td></tr>';
       return;
     }
 
@@ -202,6 +205,7 @@ async function loadAllReports() {
         <td><strong>${r.numero_caso}</strong></td>
         <td>${escapeHtml(r.perfiles?.nombre_completo || 'N/A')}</td>
         <td>${r.categorias?.nombre || 'N/A'}</td>
+        <td>${r.barrio ? escapeHtml(r.barrio) : '<span style="color:var(--text-muted);">—</span>'}</td>
         <td>${escapeHtml(truncate(r.titulo, 32))}</td>
         <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
         <td>${r.prioridad}</td>
@@ -215,7 +219,7 @@ async function loadAllReports() {
 
   } catch (error) {
     console.error('Error cargando reportes:', error);
-    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Error al cargar reportes.</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Error al cargar reportes.</td></tr>';
   }
 }
 
@@ -424,6 +428,12 @@ async function saveReportChanges(reportId) {
   msgEl.innerHTML = '';
 
   try {
+    const { data: reporteActual } = await window.supabase
+      .from('reportes')
+      .select('estado, usuario_id, numero_caso')
+      .eq('id', reportId)
+      .single();
+
     const { error } = await window.supabase
       .from('reportes')
       .update({
@@ -436,13 +446,23 @@ async function saveReportChanges(reportId) {
 
     if (error) throw error;
 
+    if (reporteActual && reporteActual.estado !== estado) {
+      const { error: notifError } = await window.supabase.from('notificaciones').insert({
+        usuario_id:  reporteActual.usuario_id,
+        reporte_id:  reportId,
+        numero_caso: reporteActual.numero_caso,
+        mensaje:     `Tu reporte ${reporteActual.numero_caso} cambió al estado: ${estado}`
+      });
+      if (notifError) console.error('Error insertando notificación:', notifError);
+    }
+
     msgEl.innerHTML = '<span style="color:var(--success);">✅ Cambios guardados correctamente.</span>';
 
     // Refrescar modal y tabla tras breve pausa
     setTimeout(() => {
       openManageModal(reportId);
       if (currentView === 'all-reports') loadAllReports();
-      if (currentView === 'dashboard')   loadDashboard(currentPeriod);
+      if (currentView === 'dashboard')   loadDashboard(currentPeriod, document.getElementById('dash-filter-barrio')?.value.trim() || '');
     }, 1400);
 
   } catch (error) {
@@ -515,6 +535,92 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ─── CSV Export ───────────────────────────────────────────────
+function escapeCsvField(value) {
+  const str = (value === null || value === undefined) ? '' : String(value);
+  if (/[;,"\n]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+async function exportToCSV() {
+  const btn = document.getElementById('btn-export-csv');
+  const originalText = btn ? btn.textContent : '';
+
+  if (btn) {
+    btn.disabled    = true;
+    btn.textContent = 'Exportando...';
+  }
+
+  try {
+    const estado    = document.getElementById('filter-report-estado')?.value || '';
+    const categoria = document.getElementById('filter-categoria')?.value    || '';
+    const dateFrom  = document.getElementById('filter-date-from')?.value    || '';
+    const dateTo    = document.getElementById('filter-date-to')?.value      || '';
+
+    let query = window.supabase
+      .from('reportes')
+      .select('*, categorias(nombre), perfiles(nombre_completo)')
+      .order('created_at', { ascending: false });
+
+    if (estado)    query = query.eq('estado', estado);
+    if (categoria) query = query.eq('categoria_id', categoria);
+    if (dateFrom)  query = query.gte('created_at', dateFrom);
+    if (dateTo)    query = query.lte('created_at', dateTo + 'T23:59:59');
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      alert('No hay reportes para exportar con los filtros actuales');
+      return;
+    }
+
+    const headers = [
+      'Número de Caso', 'Ciudadano', 'Categoría', 'Título',
+      'Estado', 'Prioridad', 'Entidad Responsable', 'Ubicación',
+      'Fecha Ocurrencia', 'Fecha Creación'
+    ].map(escapeCsvField).join(';');
+
+    const rows = data.map(r => [
+      escapeCsvField(r.numero_caso),
+      escapeCsvField(r.perfiles?.nombre_completo || ''),
+      escapeCsvField(r.categorias?.nombre || ''),
+      escapeCsvField(r.titulo),
+      escapeCsvField(r.estado),
+      escapeCsvField(r.prioridad),
+      escapeCsvField(r.entidad_responsable || ''),
+      escapeCsvField(r.ubicacion),
+      escapeCsvField(formatDate(r.fecha_ocurrencia)),
+      escapeCsvField(formatDate(r.created_at))
+    ].join(';'));
+
+    // BOM para que Excel en español reconozca UTF-8 correctamente
+    const csv  = '﻿' + [headers, ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href     = url;
+    a.download = `reportes_visionbarrial_${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error('Error exportando CSV:', err);
+    alert('Error al exportar: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
 function stateBadge(estado) {
   const map = {
     'Pendiente':   'pendiente',
@@ -562,14 +668,27 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Filtro por período (dashboard)
   document.querySelectorAll('[data-period]').forEach(btn => {
     btn.addEventListener('click', function () {
-      loadDashboard(this.dataset.period);
+      const period = this.dataset.period;
+      const barrioInput = document.getElementById('dash-filter-barrio');
+      if (period === 'all' && barrioInput) barrioInput.value = '';
+      loadDashboard(period, barrioInput?.value.trim() || '');
     });
   });
 
+  // Filtro de barrio en el dashboard (debounce 400ms)
+  let dashBarrioTimer = null;
+  document.getElementById('dash-filter-barrio')?.addEventListener('input', function (e) {
+    clearTimeout(dashBarrioTimer);
+    dashBarrioTimer = setTimeout(() => {
+      loadDashboard(currentPeriod, e.target.value.trim());
+    }, 400);
+  });
+
   // Filtros de reportes
+  document.getElementById('btn-export-csv')?.addEventListener('click', exportToCSV);
   document.getElementById('btn-apply-filters')?.addEventListener('click', loadAllReports);
   document.getElementById('btn-clear-filters')?.addEventListener('click', () => {
-    ['filter-report-estado', 'filter-categoria', 'filter-date-from', 'filter-date-to']
+    ['filter-report-estado', 'filter-categoria', 'filter-date-from', 'filter-date-to', 'filter-barrio']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     loadAllReports();
   });

@@ -206,7 +206,7 @@ async function loadAllReports() {
         <td>${escapeHtml(r.perfiles?.nombre_completo || 'N/A')}</td>
         <td>${r.categorias?.nombre || 'N/A'}</td>
         <td>${r.barrio ? escapeHtml(r.barrio) : '<span style="color:var(--text-muted);">—</span>'}</td>
-        <td>${escapeHtml(truncate(r.titulo, 32))}</td>
+        <td>${escapeHtml(truncate(r.titulo, 28))}</td>
         <td><span class="badge badge-${stateBadge(r.estado)}">${r.estado}</span></td>
         <td>${r.prioridad}</td>
         <td>${r.entidad_responsable ? escapeHtml(r.entidad_responsable) : '<span style="color:var(--text-muted);">—</span>'}</td>
@@ -489,18 +489,20 @@ function closeSidebar() {
 
 function openSidebar() {
   const sidebar = document.getElementById('sidebar');
-  if (!sidebar || sidebar.classList.contains('open')) return;
+  if (!sidebar) return;
   sidebar.classList.add('open');
-  const overlay = document.createElement('div');
-  overlay.id = 'sidebar-overlay';
-  Object.assign(overlay.style, {
-    position:   'fixed',
-    inset:      '0',
-    zIndex:     '99',
-    background: 'rgba(0,0,0,0.5)'
-  });
-  overlay.addEventListener('click', closeSidebar);
-  document.body.appendChild(overlay);
+  if (!document.getElementById('sidebar-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.id = 'sidebar-overlay';
+    Object.assign(overlay.style, {
+      position:   'fixed',
+      inset:      '0',
+      zIndex:     '99',
+      background: 'rgba(0,0,0,0.5)'
+    });
+    overlay.addEventListener('click', closeSidebar);
+    document.body.appendChild(overlay);
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -638,7 +640,16 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ── Listeners de sidebar: sin dependencia de auth ni awaits ──
   // Se registran de inmediato para que el botón hamburguesa funcione
   // desde el primer momento, igual que toggleMenu en app.js.
-  document.getElementById('btn-menu')?.addEventListener('click', openSidebar);
+  document.getElementById('btn-menu')?.addEventListener('click', () => {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
 
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', closeSidebar);

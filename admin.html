@@ -119,11 +119,42 @@
       border-bottom: 1px solid var(--border);
       background: linear-gradient(180deg, rgba(232,239,235,0.50) 0%, rgba(232,239,235,0.20) 100%);
     }
+    .filter-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: flex-end;
+    }
+    .filter-fields .form-group {
+      flex: 1 1 160px;
+      min-width: 140px;
+      margin-bottom: 0;
+    }
     .filter-actions {
       display: flex;
-      gap: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
       margin-top: 1.1rem;
     }
+
+    /* ── All-reports table ──────────────────────────── */
+    #view-all-reports .table-wrapper {
+      overflow-x: auto;
+      width: 100%;
+    }
+    #view-all-reports .data-table {
+      min-width: 900px;
+    }
+    #view-all-reports .data-table th:nth-child(1)  { min-width: 130px; }
+    #view-all-reports .data-table th:nth-child(2)  { min-width: 120px; }
+    #view-all-reports .data-table th:nth-child(3)  { min-width: 120px; }
+    #view-all-reports .data-table th:nth-child(4)  { min-width: 100px; }
+    #view-all-reports .data-table th:nth-child(5)  { min-width: 140px; }
+    #view-all-reports .data-table th:nth-child(6)  { min-width: 110px; }
+    #view-all-reports .data-table th:nth-child(7)  { min-width:  90px; }
+    #view-all-reports .data-table th:nth-child(8)  { min-width: 160px; }
+    #view-all-reports .data-table th:nth-child(9)  { min-width: 110px; }
+    #view-all-reports .data-table th:nth-child(10) { min-width:  90px; }
 
     /* ── Management modal ───────────────────────────── */
     #modal-manage .modal-content {
@@ -184,9 +215,6 @@
       grid-template-columns: 1fr 1fr;
       gap: 1.1rem;
     }
-
-    /* ── All-reports table ──────────────────────────── */
-    .th-entidad { min-width: 140px; }
 
     /* ── Responsive ─────────────────────────────────── */
     @media (max-width: 900px) {
@@ -382,7 +410,7 @@
         <div class="card">
           <!-- Filtros -->
           <div class="filter-panel">
-            <div class="form-row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:0;">
+            <div class="filter-fields">
               <div class="form-group">
                 <label class="form-label" for="filter-report-estado">Estado</label>
                 <select id="filter-report-estado" class="filter-select" style="width:100%;">
@@ -487,7 +515,7 @@
     document.addEventListener('DOMContentLoaded', function () {
       var allReportsTbody = document.getElementById('all-reports-tbody');
       if (allReportsTbody) {
-        var labels = ['Número','Ciudadano','Categoría','Título','Estado','Prioridad','Entidad','Fecha','Acción'];
+        var labels = ['Número','Ciudadano','Categoría','Barrio','Título','Estado','Prioridad','Entidad','Fecha','Acción'];
         new MutationObserver(function () {
           allReportsTbody.querySelectorAll('tr').forEach(function (tr) {
             tr.querySelectorAll('td').forEach(function (td, i) {
